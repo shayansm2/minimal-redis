@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -31,8 +32,27 @@ func handleConnection(conn net.Conn) {
 		in := make([]byte, 4096)
 		_, err := conn.Read(in)
 		if err != nil {
-			conn.Close()
+			fmt.Println(err)
+			return
 		}
-		conn.Write([]byte("+PONG\r\n"))
+		args, err := respArrayParse(string(in))
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		cmd := args[0]
+		var out string
+		switch strings.ToLower(cmd) {
+		case "ping":
+			out = pingHandler()
+		case "echo":
+			out = echoHandler(args[1])
+		case "set":
+			out = setHandler(args[1], args[2])
+		case "get":
+			out = getHandler(args[1])
+		}
+		conn.Write([]byte(out))
 	}
 }
