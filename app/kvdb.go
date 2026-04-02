@@ -2,15 +2,15 @@ package main
 
 import "time"
 
-type DB map[string]string
+type KeyValueDB map[string]string
 
-var db DB
+var db KeyValueDB
 
 func init() {
-	db = make(DB)
+	db = make(KeyValueDB)
 }
 
-func (db *DB) set(key, value string, expiry *int) {
+func (db *KeyValueDB) set(key, value string, expiry *int) {
 	(*db)[key] = value
 	if expiry != nil {
 		go func() {
@@ -20,11 +20,11 @@ func (db *DB) set(key, value string, expiry *int) {
 	}
 }
 
-func (db *DB) unset(key string) {
+func (db *KeyValueDB) unset(key string) {
 	delete(*db, key)
 }
 
-func (db *DB) get(key string) (string, bool) {
+func (db *KeyValueDB) get(key string) (string, bool) {
 	value, found := (*db)[key]
 	return value, found
 }

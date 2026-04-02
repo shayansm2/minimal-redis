@@ -12,15 +12,16 @@ var handlers = map[string]handler{
 	"echo": echoHandler,
 	"set":  setHandler,
 	"get":  getHandler,
+	"incr": incrHandler,
 }
 
 func pingHandler(args []string) string {
-	return respStringEncode("PONG")
+	return respSimpleStringEncode("PONG")
 }
 
 func echoHandler(args []string) string {
 	str := args[0]
-	return bulkEncode(str)
+	return bulkStringEncode(str)
 }
 
 func setHandler(args []string) string {
@@ -38,7 +39,7 @@ func setHandler(args []string) string {
 	}
 
 	db.set(key, value, expiry)
-	return respStringEncode("OK")
+	return respSimpleStringEncode("OK")
 }
 
 func getHandler(args []string) string {
@@ -47,5 +48,15 @@ func getHandler(args []string) string {
 	if !found {
 		return NullBulkString
 	}
-	return bulkEncode(value)
+	return bulkStringEncode(value)
+}
+
+func incrHandler(args []string) string {
+	key := args[0]
+	value, _ := db.get(key)
+	numericValue, _ := strconv.Atoi(value)
+	newNumericValue := numericValue + 1
+	newValue := strconv.Itoa(newNumericValue)
+	db.set(key, newValue, nil)
+	return respIntegerEncode(newNumericValue)
 }
