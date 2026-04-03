@@ -27,13 +27,10 @@ func main() {
 
 var UnknownCommandError = fmt.Errorf("ERR unknown command")
 
-type Transaction *bool
-
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	isIntransaction := false
-	var t Transaction = &isIntransaction
+	var t Transaction
 
 	for {
 		buf := make([]byte, 4096)
@@ -54,7 +51,7 @@ func handleConnection(conn net.Conn) {
 			conn.Write([]byte(toRespError(UnknownCommandError)))
 			continue
 		}
-		out := handler(t, args[1:])
+		out := handler(&t, args[1:])
 		conn.Write([]byte(out))
 	}
 }

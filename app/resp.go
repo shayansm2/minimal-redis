@@ -7,6 +7,9 @@ import (
 	"strings"
 )
 
+type RespStr string
+type BulkStr string
+
 var RespParseError = fmt.Errorf("not a valid RESP array")
 
 // does only support array of strings (not integers)
@@ -40,7 +43,11 @@ func respArrayParse(str string) ([]string, error) {
 	return result, nil
 }
 
-func toRespSimpleString(str string) string {
+func toRespArray(array []string) string {
+	return fmt.Sprintf("*%d\r\n%s", len(array), strings.Join(array, ""))
+}
+
+func toRespSimpleString(str RespStr) string {
 	return fmt.Sprintf("+%s\r\n", str)
 }
 
@@ -54,7 +61,7 @@ func toRespInteger(num int) string {
 
 const NullBulkString = "$-1\r\n"
 
-func toBulkString(str string) string {
+func toBulkString(str BulkStr) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 }
 
@@ -80,9 +87,18 @@ func bulkStringDecode(str string) (string, error) {
 	return decoded, nil
 }
 
-func toRespArray(array []string) string {
-	for i, element := range array {
-		array[i] = toBulkString(element)
+func encode(value any) (string, error) {
+	if intVal, ok := value.(int); ok {
+		return toRespInteger(intVal), nil
 	}
-	return fmt.Sprintf("*%d\r\n%v", len(array), strings.Join(array, ""))
+	if str, ok := value.(RespStr); ok {
+		return toRespSimpleString(str), nil
+	}
+	if str, ok := value.(BulkStr); ok {
+		return toBulkString(str), nil
+	}
+	if array, ok := value.([]string); ok {
+		return toRespArray(array), nil
+	}
+	return "", fmt.Errorf("Err not implemented type")
 }
