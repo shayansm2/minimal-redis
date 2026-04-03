@@ -28,3 +28,18 @@ echo -e "PING\nECHO hi" | redis-cli
 redis-cli SET foo bar
 redis-cli GET foo
 ```
+
+7. Expiry:
+
+```shell
+redis-cli SET foo bar PX 2000
+redis-cli GET foo
+```
+
+8.  The INCR command:
+
+```shell
+redis-cli SET foo 5
+redis-cli INCR foo
+redis-cli INCR foo
+```

@@ -2,7 +2,7 @@ package main
 
 import "time"
 
-type KeyValueDB map[string]string
+type KeyValueDB map[string]any
 
 var db KeyValueDB
 
@@ -10,7 +10,7 @@ func init() {
 	db = make(KeyValueDB)
 }
 
-func (db *KeyValueDB) set(key, value string, expiry *int) {
+func (db *KeyValueDB) set(key string, value any, expiry *int) {
 	(*db)[key] = value
 	if expiry != nil {
 		go func() {
@@ -24,7 +24,7 @@ func (db *KeyValueDB) unset(key string) {
 	delete(*db, key)
 }
 
-func (db *KeyValueDB) get(key string) (string, bool) {
+func (db *KeyValueDB) get(key string) (any, bool) {
 	value, found := (*db)[key]
 	return value, found
 }

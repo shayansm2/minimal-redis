@@ -26,8 +26,12 @@ func echoHandler(args []string) string {
 
 func setHandler(args []string) string {
 	key := args[0]
-	value := args[1]
+	var value any = args[1]
 	var expiry *int = nil
+
+	if intValue, err := strconv.Atoi(value.(string)); err == nil {
+		value = intValue
+	}
 
 	if len(args) > 2 {
 		option := args[2]
@@ -48,15 +52,18 @@ func getHandler(args []string) string {
 	if !found {
 		return NullBulkString
 	}
-	return bulkStringEncode(value)
+
+	if intVal, ok := value.(int); ok {
+		// are you sure? can get respond with resp int?
+		return respIntegerEncode(intVal)
+	}
+	return bulkStringEncode(value.(string))
 }
 
 func incrHandler(args []string) string {
 	key := args[0]
 	value, _ := db.get(key)
-	numericValue, _ := strconv.Atoi(value)
-	newNumericValue := numericValue + 1
-	newValue := strconv.Itoa(newNumericValue)
+	newValue := value.(int) + 1
 	db.set(key, newValue, nil)
-	return respIntegerEncode(newNumericValue)
+	return respIntegerEncode(newValue)
 }

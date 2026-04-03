@@ -37,14 +37,15 @@ func handleConnection(conn net.Conn) {
 		}
 		args, err := respArrayParse(string(in))
 		if err != nil {
-			fmt.Println(err)
-			return
+			fmt.Printf("invalid args: %v", err)
+			continue
 		}
 
 		cmd := args[0]
 		handler, found := handlers[strings.ToLower(cmd)]
 		if !found {
-			return
+			fmt.Println("invalid command")
+			continue
 		}
 		out := handler(args[1:])
 		conn.Write([]byte(out))
