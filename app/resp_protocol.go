@@ -40,17 +40,21 @@ func respArrayParse(str string) ([]string, error) {
 	return result, nil
 }
 
-func respSimpleStringEncode(str string) string {
+func toRespSimpleString(str string) string {
 	return fmt.Sprintf("+%s\r\n", str)
 }
 
-func respIntegerEncode(num int) string {
+func toRespError(err error) string {
+	return fmt.Sprintf("-%s\r\n", err)
+}
+
+func toRespInteger(num int) string {
 	return fmt.Sprintf(":%d\r\n", num)
 }
 
 const NullBulkString = "$-1\r\n"
 
-func bulkStringEncode(str string) string {
+func toBulkString(str string) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 }
 

@@ -23,11 +23,11 @@ func TestRespArrayParse(t *testing.T) {
 func TestBulkStringEncode(t *testing.T) {
 	raw := "hello"
 	expected := "$5\r\nhello\r\n"
-	assert.Equal(t, bulkStringEncode(raw), expected)
+	assert.Equal(t, toBulkString(raw), expected)
 
 	raw = ""
 	expected = "$0\r\n\r\n"
-	assert.Equal(t, bulkStringEncode(raw), expected)
+	assert.Equal(t, toBulkString(raw), expected)
 }
 
 func TestBulkStringDecode(t *testing.T) {

@@ -1,30 +1,44 @@
 package main
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 )
 
-type handler func([]string) string
+type handler func([]string) (string, error)
 
-var handlers = map[string]handler{
-	"ping": pingHandler,
-	"echo": echoHandler,
-	"set":  setHandler,
-	"get":  getHandler,
-	"incr": incrHandler,
+func errorHandler(f handler) func([]string) string {
+	return func(s []string) string {
+		respResult, err := f(s)
+		if err != nil {
+			return toRespError(err)
+		}
+		return respResult
+	}
 }
 
-func pingHandler(args []string) string {
-	return respSimpleStringEncode("PONG")
+var handlers = map[string]func([]string) string{
+	"ping": errorHandler(pingHandler),
+	"echo": errorHandler(echoHandler),
+	"set":  errorHandler(setHandler),
+	"get":  errorHandler(getHandler),
+	"incr": errorHandler(incrHandler),
 }
 
-func echoHandler(args []string) string {
+func pingHandler(args []string) (string, error) {
+	return toRespSimpleString("PONG"), nil
+}
+
+func echoHandler(args []string) (string, error) {
+	if len(args) == 0 {
+		return "", errors.New("not enough args provided")
+	}
 	str := args[0]
-	return bulkStringEncode(str)
+	return toBulkString(str), nil
 }
 
-func setHandler(args []string) string {
+func setHandler(args []string) (string, error) {
 	key := args[0]
 	var value any = args[1]
 	var expiry *int = nil
@@ -43,29 +57,32 @@ func setHandler(args []string) string {
 	}
 
 	db.set(key, value, expiry)
-	return respSimpleStringEncode("OK")
+	return toRespSimpleString("OK"), nil
 }
 
-func getHandler(args []string) string {
+func getHandler(args []string) (string, error) {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
-		return NullBulkString
+		return NullBulkString, nil
 	}
 
 	if _, ok := value.(int); ok {
-		return bulkStringEncode(strconv.Itoa(value.(int)))
+		return toBulkString(strconv.Itoa(value.(int))), nil
 	}
-	return bulkStringEncode(value.(string))
+	return toBulkString(value.(string)), nil
 }
 
-func incrHandler(args []string) string {
+func incrHandler(args []string) (string, error) {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
 		value = 0
 	}
+	if _, isString := value.(string); isString {
+		return "", errors.New("ERR value is not an integer or out of range")
+	}
 	newValue := value.(int) + 1
 	db.set(key, newValue, nil)
-	return respIntegerEncode(newValue)
+	return toRespInteger(newValue), nil
 }
