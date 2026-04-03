@@ -1,0 +1,2 @@
+- [x] why cannot run anything inside redis-cli?
+- [x] isInTransaction is shared for all connections

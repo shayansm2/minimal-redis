@@ -43,3 +43,15 @@ func TestBulkStringDecode(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, expected, decoded)
 }
+
+func TestRespArrayEncode(t *testing.T) {
+	expected := "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
+	array := []string{"hello", "world"}
+	encoded := toRespArray(array)
+	assert.Equal(t, expected, encoded)
+
+	expected = "*0\r\n"
+	array = []string{}
+	encoded = toRespArray(array)
+	assert.Equal(t, expected, encoded)
+}

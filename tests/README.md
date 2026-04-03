@@ -45,4 +45,14 @@ redis-cli INCR foo
 
 redis-cli INCR missing_key
 redis-cli GET missing_key
+
+redis-cli SET foo xyz
+redis-cli INCR foo
+```
+
+9. The MULTI command:
+
+```shell
+redis-cli MULTI
+redis-cli EXEC
 ```

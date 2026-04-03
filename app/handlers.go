@@ -6,24 +6,44 @@ import (
 	"strings"
 )
 
+var handlers = map[string]func(Transaction, []string) string{
+	"ping":  errorHandler(dummyTransactionHandler(pingHandler)),
+	"echo":  errorHandler(dummyTransactionHandler(echoHandler)),
+	"set":   errorHandler(transactionHandler(setHandler)),
+	"get":   errorHandler(transactionHandler(getHandler)),
+	"incr":  errorHandler(transactionHandler(incrHandler)),
+	"multi": errorHandler(multiHandler),
+	"exec":  errorHandler(execHandler),
+}
+
 type handler func([]string) (string, error)
 
-func errorHandler(f handler) func([]string) string {
-	return func(s []string) string {
-		respResult, err := f(s)
+type transactionalHandler func(Transaction, []string) (string, error)
+
+func dummyTransactionHandler(f handler) transactionalHandler {
+	return func(t Transaction, s []string) (string, error) {
+		return f(s)
+	}
+}
+
+func transactionHandler(f handler) transactionalHandler {
+	return func(t Transaction, s []string) (string, error) {
+		if *t {
+			return toRespSimpleString("QUEUED"), nil
+		} else {
+			return f(s)
+		}
+	}
+}
+
+func errorHandler(f transactionalHandler) func(Transaction, []string) string {
+	return func(t Transaction, s []string) string {
+		respResult, err := f(t, s)
 		if err != nil {
 			return toRespError(err)
 		}
 		return respResult
 	}
-}
-
-var handlers = map[string]func([]string) string{
-	"ping": errorHandler(pingHandler),
-	"echo": errorHandler(echoHandler),
-	"set":  errorHandler(setHandler),
-	"get":  errorHandler(getHandler),
-	"incr": errorHandler(incrHandler),
 }
 
 func pingHandler(args []string) (string, error) {
@@ -85,4 +105,17 @@ func incrHandler(args []string) (string, error) {
 	newValue := value.(int) + 1
 	db.set(key, newValue, nil)
 	return toRespInteger(newValue), nil
+}
+
+func multiHandler(t Transaction, args []string) (string, error) {
+	*t = true
+	return toRespSimpleString("OK"), nil
+}
+
+func execHandler(t Transaction, args []string) (string, error) {
+	if !*t {
+		return "", errors.New("ERR EXEC without MULTI")
+	}
+	*t = false
+	return toRespArray([]string{}), nil
 }

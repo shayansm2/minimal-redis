@@ -25,17 +25,24 @@ func main() {
 	}
 }
 
+var UnknownCommandError = fmt.Errorf("ERR unknown command")
+
+type Transaction *bool
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	isIntransaction := false
+	var t Transaction = &isIntransaction
+
 	for {
-		in := make([]byte, 4096)
-		_, err := conn.Read(in)
+		buf := make([]byte, 4096)
+		n, err := conn.Read(buf)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
-		args, err := respArrayParse(string(in))
+		args, err := respArrayParse(string(buf[:n]))
 		if err != nil {
 			fmt.Printf("invalid args: %v", err)
 			continue
@@ -44,10 +51,10 @@ func handleConnection(conn net.Conn) {
 		cmd := args[0]
 		handler, found := handlers[strings.ToLower(cmd)]
 		if !found {
-			fmt.Println("invalid command")
+			conn.Write([]byte(toRespError(UnknownCommandError)))
 			continue
 		}
-		out := handler(args[1:])
+		out := handler(t, args[1:])
 		conn.Write([]byte(out))
 	}
 }

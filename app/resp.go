@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-var RespParseError = errors.New("not a valid RESP array")
+var RespParseError = fmt.Errorf("not a valid RESP array")
 
 // does only support array of strings (not integers)
 func respArrayParse(str string) ([]string, error) {
@@ -78,4 +78,11 @@ func bulkStringDecode(str string) (string, error) {
 		return "", BulkDecodeError
 	}
 	return decoded, nil
+}
+
+func toRespArray(array []string) string {
+	for i, element := range array {
+		array[i] = toBulkString(element)
+	}
+	return fmt.Sprintf("*%d\r\n%v", len(array), strings.Join(array, ""))
 }
