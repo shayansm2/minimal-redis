@@ -42,4 +42,7 @@ redis-cli GET foo
 redis-cli SET foo 5
 redis-cli INCR foo
 redis-cli INCR foo
+
+redis-cli INCR missing_key
+redis-cli GET missing_key
 ```

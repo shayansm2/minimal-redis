@@ -53,16 +53,18 @@ func getHandler(args []string) string {
 		return NullBulkString
 	}
 
-	if intVal, ok := value.(int); ok {
-		// are you sure? can get respond with resp int?
-		return respIntegerEncode(intVal)
+	if _, ok := value.(int); ok {
+		return bulkStringEncode(strconv.Itoa(value.(int)))
 	}
 	return bulkStringEncode(value.(string))
 }
 
 func incrHandler(args []string) string {
 	key := args[0]
-	value, _ := db.get(key)
+	value, found := db.get(key)
+	if !found {
+		value = 0
+	}
 	newValue := value.(int) + 1
 	db.set(key, newValue, nil)
 	return respIntegerEncode(newValue)
