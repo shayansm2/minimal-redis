@@ -39,7 +39,7 @@ func handleConnection(conn net.Conn) {
 			fmt.Println(err)
 			return
 		}
-		args, err := respArrayParse(string(buf[:n]))
+		args, err := respArrayBulkStringParse(string(buf[:n]))
 		if err != nil {
 			fmt.Printf("invalid args: %v", err)
 			continue

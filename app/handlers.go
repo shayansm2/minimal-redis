@@ -88,7 +88,7 @@ func getHandler(args []string) (any, error) {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
-		return NullBulkString, nil
+		return nil, nil
 	}
 
 	if _, ok := value.(int); ok {

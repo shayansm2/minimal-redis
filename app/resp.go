@@ -12,8 +12,7 @@ type BulkStr string
 
 var RespParseError = fmt.Errorf("not a valid RESP array")
 
-// does only support array of strings (not integers)
-func respArrayParse(str string) ([]string, error) {
+func respArrayBulkStringParse(str string) ([]string, error) {
 	header, body, found := strings.Cut(str, "\r\n")
 	if !found {
 		return nil, RespParseError
@@ -88,6 +87,9 @@ func bulkStringDecode(str string) (string, error) {
 }
 
 func encode(value any) (string, error) {
+	if value == nil {
+		return NullBulkString, nil
+	}
 	if intVal, ok := value.(int); ok {
 		return toRespInteger(intVal), nil
 	}
