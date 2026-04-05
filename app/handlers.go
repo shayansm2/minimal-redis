@@ -15,6 +15,7 @@ var handlers = map[string]func(*Transaction, []string) string{
 	"MULTI":   responseHandler(multiHandler),
 	"EXEC":    responseHandler(execHandler),
 	"DISCARD": responseHandler(discardHandler),
+	"CONFIG":  responseHandler(dummyTransactionHandler(configHandler)),
 }
 
 type handler func([]string) any
@@ -129,4 +130,12 @@ func discardHandler(t *Transaction, args []string) any {
 	}
 	*t = nil
 	return RespStr("OK")
+}
+
+func configHandler(args []string) any {
+	key := args[1]
+	value := configs[key]
+	keyEncoded, _ := encode(BulkStr(key))
+	valueEncoded, _ := encode(BulkStr(value))
+	return []string{keyEncoded, valueEncoded}
 }
