@@ -102,5 +102,8 @@ func encode(value any) (string, error) {
 	if array, ok := value.([]string); ok {
 		return toRespArray(array), nil
 	}
+	if err, ok := value.(error); ok {
+		return toRespError(err), nil
+	}
 	return "", fmt.Errorf("Err not implemented type")
 }

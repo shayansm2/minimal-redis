@@ -7,30 +7,31 @@ import (
 )
 
 var handlers = map[string]func(*Transaction, []string) string{
-	"ping":  responseHandler(dummyTransactionHandler(pingHandler)),
-	"echo":  responseHandler(dummyTransactionHandler(echoHandler)),
-	"set":   responseHandler(transactionHandler(setHandler)),
-	"get":   responseHandler(transactionHandler(getHandler)),
-	"incr":  responseHandler(transactionHandler(incrHandler)),
-	"multi": responseHandler(multiHandler),
-	"exec":  responseHandler(execHandler),
+	"PING":    responseHandler(dummyTransactionHandler(pingHandler)),
+	"ECHO":    responseHandler(dummyTransactionHandler(echoHandler)),
+	"SET":     responseHandler(transactionHandler(setHandler)),
+	"GET":     responseHandler(transactionHandler(getHandler)),
+	"INCR":    responseHandler(transactionHandler(incrHandler)),
+	"MULTI":   responseHandler(multiHandler),
+	"EXEC":    responseHandler(execHandler),
+	"DISCARD": responseHandler(discardHandler),
 }
 
-type handler func([]string) (any, error)
+type handler func([]string) any
 
-type transactionalHandler func(*Transaction, []string) (any, error)
+type transactionalHandler func(*Transaction, []string) any
 
 func dummyTransactionHandler(f handler) transactionalHandler {
-	return func(t *Transaction, s []string) (any, error) {
+	return func(t *Transaction, s []string) any {
 		return f(s)
 	}
 }
 
 func transactionHandler(f handler) transactionalHandler {
-	return func(t *Transaction, s []string) (any, error) {
+	return func(t *Transaction, s []string) any {
 		if *t != nil {
-			t.addToQueue(func() (any, error) { return f(s) })
-			return RespStr("QUEUED"), nil
+			t.addToQueue(func() any { return f(s) })
+			return RespStr("QUEUED")
 		} else {
 			return f(s)
 		}
@@ -39,10 +40,7 @@ func transactionHandler(f handler) transactionalHandler {
 
 func responseHandler(f transactionalHandler) func(*Transaction, []string) string {
 	return func(t *Transaction, s []string) string {
-		result, err := f(t, s)
-		if err != nil {
-			return toRespError(err)
-		}
+		result := f(t, s)
 		encoded, err := encode(result)
 		if err != nil {
 			return toRespError(err)
@@ -51,18 +49,18 @@ func responseHandler(f transactionalHandler) func(*Transaction, []string) string
 	}
 }
 
-func pingHandler(args []string) (any, error) {
-	return RespStr("PONG"), nil
+func pingHandler(args []string) any {
+	return RespStr("PONG")
 }
 
-func echoHandler(args []string) (any, error) {
+func echoHandler(args []string) any {
 	if len(args) == 0 {
-		return "", errors.New("not enough args provided")
+		return errors.New("not enough args provided")
 	}
-	return BulkStr(args[0]), nil
+	return BulkStr(args[0])
 }
 
-func setHandler(args []string) (any, error) {
+func setHandler(args []string) any {
 	key := args[0]
 	var value any = args[1]
 	var expiry *int = nil
@@ -81,46 +79,54 @@ func setHandler(args []string) (any, error) {
 	}
 
 	db.set(key, value, expiry)
-	return RespStr("OK"), nil
+	return RespStr("OK")
 }
 
-func getHandler(args []string) (any, error) {
+func getHandler(args []string) any {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
-		return nil, nil
+		return nil
 	}
 
 	if _, ok := value.(int); ok {
-		return BulkStr(strconv.Itoa(value.(int))), nil
+		return BulkStr(strconv.Itoa(value.(int)))
 	}
-	return BulkStr(value.(string)), nil
+	return BulkStr(value.(string))
 }
 
-func incrHandler(args []string) (any, error) {
+func incrHandler(args []string) any {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
 		value = 0
 	}
 	if _, isString := value.(string); isString {
-		return 0, errors.New("ERR value is not an integer or out of range")
+		return errors.New("ERR value is not an integer or out of range")
 	}
 	newValue := value.(int) + 1
 	db.set(key, newValue, nil)
-	return newValue, nil
+	return newValue
 }
 
-func multiHandler(t *Transaction, args []string) (any, error) {
+func multiHandler(t *Transaction, args []string) any {
 	*t = make(Transaction, 0)
-	return RespStr("OK"), nil
+	return RespStr("OK")
 }
 
-func execHandler(t *Transaction, args []string) (any, error) {
+func execHandler(t *Transaction, args []string) any {
 	if *t == nil {
-		return nil, errors.New("ERR EXEC without MULTI")
+		return errors.New("ERR EXEC without MULTI")
 	}
 	result := t.commit()
 	*t = nil
-	return result, nil
+	return result
+}
+
+func discardHandler(t *Transaction, args []string) any {
+	if *t == nil {
+		return errors.New("ERR DISCARD without MULTI")
+	}
+	*t = nil
+	return RespStr("OK")
 }

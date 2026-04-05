@@ -46,7 +46,7 @@ func handleConnection(conn net.Conn) {
 		}
 
 		cmd := args[0]
-		handler, found := handlers[strings.ToLower(cmd)]
+		handler, found := handlers[strings.ToUpper(cmd)]
 		if !found {
 			conn.Write([]byte(toRespError(UnknownCommandError)))
 			continue

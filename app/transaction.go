@@ -1,16 +1,15 @@
 package main
 
-type Transaction []func() (any, error)
+type Transaction []func() any
 
-func (t *Transaction) addToQueue(f func() (any, error)) {
+func (t *Transaction) addToQueue(f func() any) {
 	*t = append(*t, f)
 }
 
-// todo handling errors
 func (t *Transaction) commit() []string {
 	result := make([]string, len(*t))
 	for i, f := range *t {
-		res, _ := f()
+		res := f()
 		result[i], _ = encode(res)
 	}
 	return result
