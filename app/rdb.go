@@ -69,7 +69,6 @@ func load(file *os.File) error {
 		db.set(k, v)
 		if ns, found := exp[k]; found {
 			now := time.Now().UnixMilli()
-			fmt.Println(now, ns)
 			if now >= ns {
 				delete(db, k)
 			} else {
@@ -103,8 +102,8 @@ func findOffset(dump []byte, start int, find byte) (int, error) {
 	return start - 1, OffsetNotFound
 }
 
-func decodeHashTable(dump []byte, offset int) (kv map[string]string, exp map[string]int64, err error) {
-	kv = make(map[string]string)
+func decodeHashTable(dump []byte, offset int) (kv map[string]any, exp map[string]int64, err error) {
+	kv = make(map[string]any)
 	exp = make(map[string]int64)
 
 	i := offset
@@ -141,28 +140,31 @@ func decodeHashTable(dump []byte, offset int) (kv map[string]string, exp map[str
 		}
 		i++
 		// get key
-		key, offset := decodeFirstElement(dump[i:])
+		key, offset, t := decodeFirstElement(dump[i:])
+		if t == ValueTypeInt {
+			key = strconv.Itoa(key.(int))
+		}
 		i += offset
 		// get value
-		value, offset := decodeFirstElement(dump[i:])
+		value, offset, _ := decodeFirstElement(dump[i:])
 		i += offset
-		kv[key] = value
+		kv[key.(string)] = value
 		if ns != 0 {
-			exp[key] = ns
+			exp[key.(string)] = ns
 		}
 		hashTableLen--
 	}
 	return
 }
 
-func decodeFirstElement(dump []byte) (string, int) {
+func decodeFirstElement(dump []byte) (any, int, int) {
 	len, offset, valueType := getLen(dump)
 	if valueType == ValueTypeStr {
-		return decodeStr(dump[offset:], len), len + offset
+		return decodeStr(dump[offset:], len), len + offset, ValueTypeStr
 	} else if valueType == ValueTypeInt {
-		return strconv.FormatInt(decodeInt(dump[offset:], len), 10), len + offset
+		return int(decodeInt(dump[offset:], len)), len + offset, ValueTypeInt
 	}
-	return "", 0 // not handled yet
+	return "", 0, -1 // not handled yet
 }
 
 func getLen(dump []byte) (len, offset, valType int) {
