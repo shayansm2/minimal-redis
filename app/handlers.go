@@ -65,22 +65,20 @@ func echoHandler(args []string) any {
 func setHandler(args []string) any {
 	key := args[0]
 	var value any = args[1]
-	var expiry *int = nil
 
 	if intValue, err := strconv.Atoi(value.(string)); err == nil {
 		value = intValue
 	}
-
+	db.set(key, value)
 	if len(args) > 2 {
 		option := args[2]
 		optionValue := args[3]
 		if strings.ToLower(option) == "px" {
 			px, _ := strconv.Atoi(optionValue)
-			expiry = &px
+			db.expire(key, px)
 		}
 	}
 
-	db.set(key, value, expiry)
 	return RespStr("OK")
 }
 
@@ -107,7 +105,7 @@ func incrHandler(args []string) any {
 		return errors.New("ERR value is not an integer or out of range")
 	}
 	newValue := value.(int) + 1
-	db.set(key, newValue, nil)
+	db.set(key, newValue)
 	return newValue
 }
 

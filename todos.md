@@ -1,3 +1,4 @@
 - [x] why cannot run anything inside redis-cli?
 - [x] isInTransaction is shared for all connections
-- [ ] resp array encode and decode
+- [x] resp array encode and decode
+- [ ] incr not working when data loads from rdb

@@ -12,14 +12,15 @@ func init() {
 	db = make(KeyValueDB)
 }
 
-func (db *KeyValueDB) set(key string, value any, expiry *int) {
+func (db *KeyValueDB) set(key string, value any) {
 	(*db)[key] = value
-	if expiry != nil {
-		go func() {
-			time.Sleep(time.Duration(*expiry) * time.Millisecond)
-			db.unset(key)
-		}()
-	}
+}
+
+func (db *KeyValueDB) expire(key string, ms int) {
+	go func() {
+		time.Sleep(time.Duration(ms) * time.Millisecond)
+		db.unset(key)
+	}()
 }
 
 func (db *KeyValueDB) unset(key string) {

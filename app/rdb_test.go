@@ -31,3 +31,8 @@ func TestLengthEncoding(t *testing.T) {
 	assert.Equal(t, 4, v)
 	assert.Equal(t, ValueTypeInt, valType)
 }
+
+func TestTimestampEncoding(t *testing.T) {
+	assert.Equal(t, int64(1714089298), decodeTimestamp([]byte{0x52, 0xED, 0x2A, 0x66}))
+	assert.Equal(t, int64(1713824559637), decodeTimestamp([]byte{0x15, 0x72, 0xE7, 0x07, 0x8F, 0x01, 0x00, 0x00}))
+}

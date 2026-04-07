@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
+	"time"
 )
 
 const (
@@ -58,13 +60,22 @@ func load(file *os.File) error {
 		return err
 	}
 
-	kv, err := decodeHashTable(dump, htOffset)
+	kv, exp, err := decodeHashTable(dump, htOffset)
 	if err != nil {
 		return err
 	}
 
 	for k, v := range kv {
-		db.set(k, v, nil)
+		db.set(k, v)
+		if ns, found := exp[k]; found {
+			now := time.Now().UnixMilli()
+			fmt.Println(now, ns)
+			if now >= ns {
+				delete(db, k)
+			} else {
+				db.expire(k, int(ns-now))
+			}
+		}
 	}
 	return nil
 }
@@ -92,36 +103,41 @@ func findOffset(dump []byte, start int, find byte) (int, error) {
 	return start - 1, OffsetNotFound
 }
 
-func decodeHashTable(dump []byte, offset int) (map[string]string, error) {
-	kv := make(map[string]string)
+func decodeHashTable(dump []byte, offset int) (kv map[string]string, exp map[string]int64, err error) {
+	kv = make(map[string]string)
+	exp = make(map[string]int64)
+
 	i := offset
 	i++
-	// find number of key-values
 	hashTableLen, offset, _ := getLen(dump[i:])
 	i += offset
 	expLen, offset, _ := getLen(dump[i:])
 	i += offset
-	// for i in number of key values
 	for hashTableLen > 0 {
-		// get expiry
+		var ns int64
 		if dump[i] == OP_CODE_EXPIRETIMEMS {
 			if expLen == 0 {
-				return nil, fmt.Errorf("decode error: wrong number of expire keys")
+				err = fmt.Errorf("decode error: wrong number of expire keys")
+				return
 			}
 			i++
+			ns = decodeTimestamp(dump[i : i+8])
 			i += 8
 			expLen--
 		} else if dump[i] == OP_CODE_EXPIRETIME {
 			if expLen == 0 {
-				return nil, fmt.Errorf("decode error: wrong number of expire keys")
+				err = fmt.Errorf("decode error: wrong number of expire keys")
+				return
 			}
 			i++
+			ns = decodeTimestamp(dump[i : i+4])
 			i += 4
 			expLen--
 		}
 
 		if valType := dump[i]; valType != 0 {
-			return nil, fmt.Errorf("only supporting strings yet")
+			err = fmt.Errorf("only supporting strings yet")
+			return
 		}
 		i++
 		// get key
@@ -131,9 +147,12 @@ func decodeHashTable(dump []byte, offset int) (map[string]string, error) {
 		value, offset := decodeFirstElement(dump[i:])
 		i += offset
 		kv[key] = value
+		if ns != 0 {
+			exp[key] = ns
+		}
 		hashTableLen--
 	}
-	return kv, nil
+	return
 }
 
 func decodeFirstElement(dump []byte) (string, int) {
@@ -141,7 +160,7 @@ func decodeFirstElement(dump []byte) (string, int) {
 	if valueType == ValueTypeStr {
 		return decodeStr(dump[offset:], len), len + offset
 	} else if valueType == ValueTypeInt {
-		return strconv.Itoa(decodeInt(dump[offset:], len)), len + offset
+		return strconv.FormatInt(decodeInt(dump[offset:], len), 10), len + offset
 	}
 	return "", 0 // not handled yet
 }
@@ -154,7 +173,7 @@ func getLen(dump []byte) (len, offset, valType int) {
 		return (int(dump[0])-0b01000000)*256 + int(dump[1]), 2, ValueTypeStr
 	}
 	if dump[0] < 0b11000000 {
-		return decodeInt(dump[1:], 4), 5, ValueTypeStr
+		return int(decodeInt(dump[1:], 4)), 5, ValueTypeStr
 	}
 
 	switch dump[0] {
@@ -173,11 +192,22 @@ func decodeStr(dump []byte, len int) string {
 	return string(dump[0:len])
 }
 
-func decodeInt(dump []byte, len int) int {
-	var result int
+func decodeInt(dump []byte, len int) int64 {
+	var result int64
 	for i := 0; i < len; i++ {
 		num := int(dump[i])
-		result = (256 * result) + num
+		result = (256 * result) + int64(num)
 	}
 	return result
+}
+
+func decodeTimestamp(dump []byte) int64 {
+	bytes := make([]byte, len(dump))
+	copy(bytes, dump)
+	slices.Reverse(bytes)
+	res := decodeInt(bytes, len(bytes))
+	if len(bytes) == 8 {
+		return res
+	}
+	return res * 1e3
 }
