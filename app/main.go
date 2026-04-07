@@ -8,18 +8,29 @@ import (
 )
 
 func main() {
+	err := loadRDB()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	err = initTcpServer()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func initTcpServer() error {
 	listener, err := net.Listen("tcp", "0.0.0.0:6379")
 	if err != nil {
-		fmt.Println("Failed to bind to port 6379")
-		os.Exit(1)
+		return fmt.Errorf("Failed to bind to port 6379")
 	}
 	defer listener.Close()
 
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			fmt.Println("Error accepting connection: ", err.Error())
-			os.Exit(1)
+			return fmt.Errorf("Error accepting connection: %s", err.Error())
 		}
 		go handleConnection(conn)
 	}

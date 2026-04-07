@@ -64,6 +64,14 @@ func toBulkString(str BulkStr) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 }
 
+func toBulkArray(arr []BulkStr) []string {
+	result := make([]string, len(arr))
+	for i, str := range arr {
+		result[i] = toBulkString(str)
+	}
+	return result
+}
+
 var BulkDecodeError = errors.New("not a valid bulk string")
 
 func bulkStringDecode(str string) (string, error) {
@@ -98,6 +106,9 @@ func encode(value any) (string, error) {
 	}
 	if str, ok := value.(BulkStr); ok {
 		return toBulkString(str), nil
+	}
+	if bulkArray, ok := value.([]BulkStr); ok {
+		return toRespArray(toBulkArray(bulkArray)), nil
 	}
 	if array, ok := value.([]string); ok {
 		return toRespArray(array), nil

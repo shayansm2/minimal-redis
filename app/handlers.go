@@ -16,6 +16,7 @@ var handlers = map[string]func(*Transaction, []string) string{
 	"EXEC":    responseHandler(execHandler),
 	"DISCARD": responseHandler(discardHandler),
 	"CONFIG":  responseHandler(dummyTransactionHandler(configHandler)),
+	"KEYS":    responseHandler(dummyTransactionHandler(keysHandler)),
 }
 
 type handler func([]string) any
@@ -133,9 +134,22 @@ func discardHandler(t *Transaction, args []string) any {
 }
 
 func configHandler(args []string) any {
+	if len(args) < 2 {
+		return errors.New("ERR not enough args provided")
+	}
 	key := args[1]
 	value := configs[key]
-	keyEncoded, _ := encode(BulkStr(key))
-	valueEncoded, _ := encode(BulkStr(value))
-	return []string{keyEncoded, valueEncoded}
+	return []BulkStr{BulkStr(key), BulkStr(value)}
+}
+
+func keysHandler(args []string) any {
+	if len(args) < 1 {
+		return errors.New("ERR not enough args provided")
+	}
+	keys := db.keys()
+	bulkKeys := make([]BulkStr, len(keys))
+	for i, key := range keys {
+		bulkKeys[i] = BulkStr(key)
+	}
+	return bulkKeys
 }

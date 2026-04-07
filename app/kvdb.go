@@ -1,6 +1,8 @@
 package main
 
-import "time"
+import (
+	"time"
+)
 
 type KeyValueDB map[string]any
 
@@ -27,4 +29,14 @@ func (db *KeyValueDB) unset(key string) {
 func (db *KeyValueDB) get(key string) (any, bool) {
 	value, found := (*db)[key]
 	return value, found
+}
+
+func (db *KeyValueDB) keys() []string {
+	keys := make([]string, len(*db))
+	i := 0
+	for key := range *db {
+		keys[i] = key
+		i++
+	}
+	return keys
 }

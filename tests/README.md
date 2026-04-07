@@ -16,7 +16,7 @@ echo -e "PING\nPING" | redis-cli
 nc localhost 6379
 ```
 
-5.  Implement the ECHO command
+5.  Implement the ECHO command:
 
 ```shell
 redis-cli PING
@@ -83,4 +83,11 @@ INCR grape
 GET grape
 EXEC
 redis-cli GET blueberry
+```
+
+10. RDB file config:
+
+```shell
+./your_program.sh --dir /tmp/rdb-7441 --dbfilename pineapple.rdb
+redis-cli CONFIG GET dir
 ```
