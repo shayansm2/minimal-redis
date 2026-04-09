@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -23,6 +24,7 @@ var handlers = map[string]func(*Transaction, []string) string{
 	"LLEN":    responseHandler(transactionHandler(lLenHandler)),
 	"LPOP":    responseHandler(transactionHandler(lPopHandler)),
 	"BLPOP":   responseHandler(transactionHandler(bLPopHandler)),
+	"WATCH":   responseHandler(watchHandler),
 }
 
 type handler func([]string) any
@@ -115,4 +117,11 @@ func keysHandler(args []string) any {
 		bulkKeys[i] = BulkStr(key)
 	}
 	return bulkKeys
+}
+
+func watchHandler(t *Transaction, args []string) any {
+	if *t != nil {
+		return fmt.Errorf("ERR WATCH inside MULTI is not allowed")
+	}
+	return RespStr("OK")
 }
