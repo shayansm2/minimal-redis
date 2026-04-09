@@ -4,7 +4,16 @@ import (
 	"errors"
 	"slices"
 	"strconv"
+	"sync"
 )
+
+var subscribeChannels map[string][]chan<- string
+var mu sync.Mutex
+
+func init() {
+	subscribeChannels = make(map[string][]chan<- string)
+	bgJobs = append(bgJobs, PushedElementsPublisherJob)
+}
 
 func lPushHandler(args []string) any {
 	if len(args) < 2 {
@@ -102,6 +111,18 @@ func lPopHandler(args []string) any {
 	return bulks
 }
 
+func bLPopHandler(args []string) any {
+	if len(args) < 1 {
+		return errors.New("ERR not enough args provided")
+	}
+	name := args[0]
+	ch := make(chan string, 0)
+	subscribeToListPush(name, ch)
+	pop := <-ch
+
+	return []BulkStr{BulkStr(name), BulkStr(pop)}
+}
+
 func getListFromDB(name string) (list []string, found bool) {
 	l, found := db.get(name)
 	if !found {
@@ -109,4 +130,38 @@ func getListFromDB(name string) (list []string, found bool) {
 	}
 	list = l.([]string)
 	return
+}
+
+func subscribeToListPush(name string, ch chan<- string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if _, found := subscribeChannels[name]; !found {
+		subscribeChannels[name] = make([]chan<- string, 0)
+	}
+	subscribeChannels[name] = append(subscribeChannels[name], ch)
+}
+
+// todo ctx cancel
+func PushedElementsPublisherJob() {
+	for {
+		mu.Lock()
+		for name, chans := range subscribeChannels {
+			if len(chans) == 0 {
+				continue
+			}
+			list, found := getListFromDB(name)
+			if !found || len(list) == 0 || len(chans) == 0 {
+				continue
+			}
+			pop := list[0]
+			list = list[1:]
+			ch := chans[0]
+			chans = chans[1:]
+			ch <- pop
+			close(ch)
+			db.set(name, list)
+			subscribeChannels[name] = chans
+		}
+		mu.Unlock()
+	}
 }

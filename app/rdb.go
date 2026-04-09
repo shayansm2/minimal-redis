@@ -70,7 +70,7 @@ func load(file *os.File) error {
 		if ns, found := exp[k]; found {
 			now := time.Now().UnixMilli()
 			if now >= ns {
-				delete(db, k)
+				db.unset(k)
 			} else {
 				db.expire(k, int(ns-now))
 			}

@@ -1,19 +1,28 @@
 package main
 
 import (
+	"sync"
 	"time"
 )
 
-type KeyValueDB map[string]any
+type KeyValueDB struct {
+	kv map[string]any
+	mu sync.RWMutex
+}
 
 var db KeyValueDB
 
 func init() {
-	db = make(KeyValueDB)
+	db = KeyValueDB{
+		kv: make(map[string]any),
+		mu: sync.RWMutex{},
+	}
 }
 
 func (db *KeyValueDB) set(key string, value any) {
-	(*db)[key] = value
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	db.kv[key] = value
 }
 
 func (db *KeyValueDB) expire(key string, ms int) {
@@ -24,18 +33,24 @@ func (db *KeyValueDB) expire(key string, ms int) {
 }
 
 func (db *KeyValueDB) unset(key string) {
-	delete(*db, key)
+	db.mu.Lock()
+	defer db.mu.Unlock()
+	delete(db.kv, key)
 }
 
 func (db *KeyValueDB) get(key string) (any, bool) {
-	value, found := (*db)[key]
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	value, found := (db.kv)[key]
 	return value, found
 }
 
 func (db *KeyValueDB) keys() []string {
-	keys := make([]string, len(*db))
+	db.mu.RLock()
+	defer db.mu.RUnlock()
+	keys := make([]string, len(db.kv))
 	i := 0
-	for key := range *db {
+	for key := range db.kv {
 		keys[i] = key
 		i++
 	}

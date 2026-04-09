@@ -7,11 +7,16 @@ import (
 	"strings"
 )
 
+var bgJobs []func()
+
 func main() {
 	err := loadRDB()
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+	for _, job := range bgJobs {
+		go job()
 	}
 	err = initTcpServer()
 	if err != nil {

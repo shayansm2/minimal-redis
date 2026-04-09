@@ -22,6 +22,7 @@ var handlers = map[string]func(*Transaction, []string) string{
 	"LRANGE":  responseHandler(transactionHandler(lRangeHandler)),
 	"LLEN":    responseHandler(transactionHandler(lLenHandler)),
 	"LPOP":    responseHandler(transactionHandler(lPopHandler)),
+	"BLPOP":   responseHandler(transactionHandler(bLPopHandler)),
 }
 
 type handler func([]string) any

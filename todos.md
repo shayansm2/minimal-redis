@@ -2,3 +2,4 @@
 - [x] isInTransaction is shared for all connections
 - [x] resp array encode and decode
 - [x] incr not working when data loads from rdb
+- [ ] cancel ctx to bg jobs
