@@ -59,6 +59,7 @@ func toRespInteger(num int) string {
 }
 
 const NullBulkString = "$-1\r\n"
+const NullArray = "*-1\r\n"
 
 func toBulkString(str BulkStr) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
@@ -98,23 +99,23 @@ func encode(value any) (string, error) {
 	if value == nil {
 		return NullBulkString, nil
 	}
-	if intVal, ok := value.(int); ok {
-		return toRespInteger(intVal), nil
+	switch v := value.(type) {
+	case int:
+		return toRespInteger(v), nil
+	case RespStr:
+		return toRespSimpleString(v), nil
+	case BulkStr:
+		return toBulkString(v), nil
+	case []BulkStr:
+		return toRespArray(toBulkArray(v)), nil
+	case []string:
+		if v == nil {
+			return NullArray, nil
+		}
+		return toRespArray(v), nil
+	case error:
+		return toRespError(v), nil
+	default:
+		return "", fmt.Errorf("Err not implemented type")
 	}
-	if str, ok := value.(RespStr); ok {
-		return toRespSimpleString(str), nil
-	}
-	if str, ok := value.(BulkStr); ok {
-		return toBulkString(str), nil
-	}
-	if bulkArray, ok := value.([]BulkStr); ok {
-		return toRespArray(toBulkArray(bulkArray)), nil
-	}
-	if array, ok := value.([]string); ok {
-		return toRespArray(array), nil
-	}
-	if err, ok := value.(error); ok {
-		return toRespError(err), nil
-	}
-	return "", fmt.Errorf("Err not implemented type")
 }

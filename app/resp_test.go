@@ -82,4 +82,8 @@ func TestEncode(t *testing.T) {
 	val, err = encode(BulkStr("hi"))
 	assert.Nil(t, err)
 	assert.Equal(t, "$2\r\nhi\r\n", val)
+
+	var nullArr []string
+	val, err = encode(nullArr)
+	assert.Equal(t, NullArray, val)
 }

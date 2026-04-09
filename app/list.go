@@ -5,13 +5,75 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 )
 
-var subscribeChannels map[string][]chan<- string
+type Node[T any] struct {
+	id   int
+	val  T
+	next *Node[T]
+}
+
+type LinkedList[T any] struct {
+	head *Node[T]
+	tail *Node[T]
+}
+
+func NewLinkedList[T any]() *LinkedList[T] {
+	return &LinkedList[T]{head: nil, tail: nil}
+}
+
+func (l *LinkedList[T]) push(val T) int {
+	if l.tail == nil {
+		new := Node[T]{id: 1, val: val, next: nil}
+		l.head = &new
+		l.tail = &new
+	} else {
+		new := Node[T]{id: l.tail.id + 1, val: val, next: nil}
+		l.tail.next = &new
+		l.tail = &new
+	}
+	return l.tail.id
+}
+
+func (l *LinkedList[T]) pop() T {
+	pop := l.head.val
+	l.head = l.head.next
+	if l.head == nil {
+		l.tail = nil
+	}
+	return pop
+}
+
+func (l *LinkedList[T]) del(id int) {
+	var prev *Node[T] = nil
+	node := l.head
+	for node.id < id {
+		prev = node
+		node = node.next
+	}
+	if prev == nil {
+		l.head = node.next
+	} else {
+		prev.next = node.next
+	}
+	if l.tail.id == id {
+		l.tail = prev
+	}
+	if l.head == nil {
+		l.tail = nil
+	}
+}
+
+func (l *LinkedList[T]) isEmpty() bool {
+	return l.head == nil
+}
+
+var subscribeChannels map[string]*LinkedList[chan<- string]
 var mu sync.Mutex
 
 func init() {
-	subscribeChannels = make(map[string][]chan<- string)
+	subscribeChannels = make(map[string]*LinkedList[chan<- string])
 	bgJobs = append(bgJobs, PushedElementsPublisherJob)
 }
 
@@ -112,15 +174,27 @@ func lPopHandler(args []string) any {
 }
 
 func bLPopHandler(args []string) any {
-	if len(args) < 1 {
+	if len(args) < 2 {
 		return errors.New("ERR not enough args provided")
 	}
 	name := args[0]
+	timeout, _ := strconv.ParseFloat(args[1], 64)
 	ch := make(chan string, 0)
-	subscribeToListPush(name, ch)
-	pop := <-ch
+	id := subscribeToListPush(name, ch)
+	if timeout == 0 {
+		pop := <-ch
+		return []BulkStr{BulkStr(name), BulkStr(pop)}
+	}
 
-	return []BulkStr{BulkStr(name), BulkStr(pop)}
+	select {
+	case pop := <-ch:
+		return []BulkStr{BulkStr(name), BulkStr(pop)}
+	case <-time.After(time.Millisecond * time.Duration(1000*timeout)):
+		unsubscribeToListPush(name, id)
+		close(ch)
+		var nullArr []string
+		return nullArr
+	}
 }
 
 func getListFromDB(name string) (list []string, found bool) {
@@ -132,13 +206,19 @@ func getListFromDB(name string) (list []string, found bool) {
 	return
 }
 
-func subscribeToListPush(name string, ch chan<- string) {
+func subscribeToListPush(name string, ch chan<- string) int {
 	mu.Lock()
 	defer mu.Unlock()
 	if _, found := subscribeChannels[name]; !found {
-		subscribeChannels[name] = make([]chan<- string, 0)
+		subscribeChannels[name] = NewLinkedList[chan<- string]()
 	}
-	subscribeChannels[name] = append(subscribeChannels[name], ch)
+	return subscribeChannels[name].push(ch)
+}
+
+func unsubscribeToListPush(name string, id int) {
+	mu.Lock()
+	defer mu.Unlock()
+	subscribeChannels[name].del(id)
 }
 
 // todo ctx cancel
@@ -146,17 +226,16 @@ func PushedElementsPublisherJob() {
 	for {
 		mu.Lock()
 		for name, chans := range subscribeChannels {
-			if len(chans) == 0 {
+			if chans.isEmpty() {
 				continue
 			}
 			list, found := getListFromDB(name)
-			if !found || len(list) == 0 || len(chans) == 0 {
+			if !found || len(list) == 0 {
 				continue
 			}
 			pop := list[0]
 			list = list[1:]
-			ch := chans[0]
-			chans = chans[1:]
+			ch := chans.pop()
 			ch <- pop
 			close(ch)
 			db.set(name, list)
