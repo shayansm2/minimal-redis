@@ -26,6 +26,7 @@ var handlers = map[string]func(context.Context, []string) string{
 	"BLPOP":   responseHandler(transactionHandler(bLPopHandler)),
 	"WATCH":   responseHandler(watchHandler),
 	"UNWATCH": responseHandler(unwatchHandler),
+	"TYPE":    responseHandler(typeHandler),
 }
 
 type handler func(context.Context, []string) any
@@ -118,4 +119,16 @@ func keysHandler(ctx context.Context, args []string) any {
 		bulkKeys[i] = BulkStr(key)
 	}
 	return bulkKeys
+}
+
+const TypeString = "string"
+const TypeNone = "none"
+
+func typeHandler(ctx context.Context, args []string) any {
+	key := args[0]
+	_, found := db.get(key)
+	if !found {
+		return RespStr(TypeNone)
+	}
+	return RespStr(TypeString)
 }
