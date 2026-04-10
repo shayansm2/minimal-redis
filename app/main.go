@@ -44,11 +44,16 @@ func initTcpServer() error {
 
 var UnknownCommandError = fmt.Errorf("ERR unknown command")
 
+const TransactionContextKey = "transaction"
+const WatcherContextKey = "watcher"
+
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	var t Transaction
-	ctx := context.WithValue(context.Background(), "transaction", &t)
+	watcher := NewWatcher()
+	ctx := context.WithValue(context.Background(), TransactionContextKey, &t)
+	ctx = context.WithValue(ctx, WatcherContextKey, &watcher)
 
 	for {
 		buf := make([]byte, 4096)

@@ -9,15 +9,20 @@ import (
 	"time"
 )
 
-var subscribeChannels map[string]*LinkedList[chan<- string]
-var mu sync.Mutex
+var pushToListEvents chan string
 
-var pushEvents chan string
+var pushToListSubscribers struct {
+	notifiers map[string]*LinkedList[func(string)]
+	mu        sync.Mutex
+}
 
 func init() {
-	subscribeChannels = make(map[string]*LinkedList[chan<- string])
-	bgJobs = append(bgJobs, listPushPublisherJob)
-	pushEvents = make(chan string)
+	pushToListEvents = make(chan string)
+	pushToListSubscribers = struct {
+		notifiers map[string]*LinkedList[func(string)]
+		mu        sync.Mutex
+	}{notifiers: make(map[string]*LinkedList[func(string)])}
+	bgJobs = append(bgJobs, pushToListPublisherJob)
 }
 
 func lPushHandler(ctx context.Context, args []string) any {
@@ -34,7 +39,7 @@ func lPushHandler(ctx context.Context, args []string) any {
 	db.set(name, list)
 
 	for range elements {
-		pushEvents <- name
+		pushToListEvents <- name
 	}
 
 	return len(list)
@@ -51,7 +56,7 @@ func rPushHandler(ctx context.Context, args []string) any {
 	db.set(name, list)
 
 	for range args[1:] {
-		pushEvents <- name
+		pushToListEvents <- name
 	}
 
 	return len(list)
@@ -134,7 +139,7 @@ func bLPopHandler(ctx context.Context, args []string) any {
 
 	timeout, _ := strconv.ParseFloat(args[1], 64)
 	ch := make(chan string, 0)
-	id := subscribeToListPush(name, ch)
+	id := subscribeToListPush(name, func(s string) { ch <- s; close(ch) })
 	if timeout == 0 {
 		pop := <-ch
 		return []BulkStr{BulkStr(name), BulkStr(pop)}
@@ -160,28 +165,28 @@ func getListFromDB(name string) (list []string, found bool) {
 	return
 }
 
-func subscribeToListPush(name string, ch chan<- string) int {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, found := subscribeChannels[name]; !found {
-		subscribeChannels[name] = NewLinkedList[chan<- string]()
+func subscribeToListPush(name string, f func(string)) int {
+	pushToListSubscribers.mu.Lock()
+	defer pushToListSubscribers.mu.Unlock()
+	if _, found := pushToListSubscribers.notifiers[name]; !found {
+		pushToListSubscribers.notifiers[name] = NewLinkedList[func(string)]()
 	}
-	return subscribeChannels[name].push(ch)
+	return pushToListSubscribers.notifiers[name].push(f)
 }
 
 func unsubscribeToListPush(name string, id int) {
-	mu.Lock()
-	defer mu.Unlock()
-	subscribeChannels[name].del(id)
+	pushToListSubscribers.mu.Lock()
+	defer pushToListSubscribers.mu.Unlock()
+	pushToListSubscribers.notifiers[name].del(id)
 }
 
-func listPushPublisherJob() {
+func pushToListPublisherJob() {
 	for {
-		name := <-pushEvents
-		mu.Lock()
-		chans, found := subscribeChannels[name]
-		if !found || chans.isEmpty() {
-			mu.Unlock()
+		name := <-pushToListEvents
+		pushToListSubscribers.mu.Lock()
+		notifiers, found := pushToListSubscribers.notifiers[name]
+		if !found || notifiers.isEmpty() {
+			pushToListSubscribers.mu.Unlock()
 			continue
 		}
 		list, _ := getListFromDB(name)
@@ -189,10 +194,9 @@ func listPushPublisherJob() {
 		list = list[1:]
 		db.set(name, list)
 
-		ch := chans.pop()
-		ch <- pop
-		close(ch)
+		f := notifiers.pop()
+		f(pop)
 
-		mu.Unlock()
+		pushToListSubscribers.mu.Unlock()
 	}
 }

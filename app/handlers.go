@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -118,12 +117,4 @@ func keysHandler(ctx context.Context, args []string) any {
 		bulkKeys[i] = BulkStr(key)
 	}
 	return bulkKeys
-}
-
-func watchHandler(ctx context.Context, args []string) any {
-	t := ctx.Value("transaction").(*Transaction)
-	if *t != nil {
-		return fmt.Errorf("ERR WATCH inside MULTI is not allowed")
-	}
-	return RespStr("OK")
 }
