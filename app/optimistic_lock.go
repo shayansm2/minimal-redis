@@ -40,9 +40,16 @@ func watchHandler(ctx context.Context, args []string) any {
 	if t.isInTransaction() {
 		return errors.New("ERR WATCH inside MULTI is not allowed")
 	}
-	key := args[0]
 	watcher := ctx.Value(WatcherContextKey).(*Watcher)
-	watcher.watch(key)
+	for _, key := range args {
+		watcher.watch(key)
+	}
 
+	return RespStr("OK")
+}
+
+func unwatchHandler(ctx context.Context, args []string) any {
+	watcher := ctx.Value(WatcherContextKey).(*Watcher)
+	watcher.reset()
 	return RespStr("OK")
 }

@@ -25,6 +25,7 @@ var handlers = map[string]func(context.Context, []string) string{
 	"LPOP":    responseHandler(transactionHandler(lPopHandler)),
 	"BLPOP":   responseHandler(transactionHandler(bLPopHandler)),
 	"WATCH":   responseHandler(watchHandler),
+	"UNWATCH": responseHandler(unwatchHandler),
 }
 
 type handler func(context.Context, []string) any

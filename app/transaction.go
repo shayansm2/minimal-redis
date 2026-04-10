@@ -73,5 +73,7 @@ func discardHandler(ctx context.Context, args []string) any {
 		return errors.New("ERR DISCARD without MULTI")
 	}
 	t.abort()
+	watcher := ctx.Value(WatcherContextKey).(*Watcher)
+	watcher.reset()
 	return RespStr("OK")
 }
