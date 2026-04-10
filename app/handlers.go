@@ -1,23 +1,24 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 )
 
-var handlers = map[string]func(*Transaction, []string) string{
-	"PING":    responseHandler(dummyTransactionHandler(pingHandler)),
-	"ECHO":    responseHandler(dummyTransactionHandler(echoHandler)),
+var handlers = map[string]func(context.Context, []string) string{
+	"PING":    responseHandler(pingHandler),
+	"ECHO":    responseHandler(echoHandler),
 	"SET":     responseHandler(transactionHandler(setHandler)),
 	"GET":     responseHandler(transactionHandler(getHandler)),
 	"INCR":    responseHandler(transactionHandler(incrHandler)),
 	"MULTI":   responseHandler(multiHandler),
 	"EXEC":    responseHandler(execHandler),
 	"DISCARD": responseHandler(discardHandler),
-	"CONFIG":  responseHandler(dummyTransactionHandler(configHandler)),
-	"KEYS":    responseHandler(dummyTransactionHandler(keysHandler)),
+	"CONFIG":  responseHandler(configHandler),
+	"KEYS":    responseHandler(keysHandler),
 	"RPUSH":   responseHandler(transactionHandler(rPushHandler)),
 	"LPUSH":   responseHandler(transactionHandler(lPushHandler)),
 	"LRANGE":  responseHandler(transactionHandler(lRangeHandler)),
@@ -27,11 +28,11 @@ var handlers = map[string]func(*Transaction, []string) string{
 	"WATCH":   responseHandler(watchHandler),
 }
 
-type handler func([]string) any
+type handler func(context.Context, []string) any
 
-func responseHandler(f transactionalHandler) func(*Transaction, []string) string {
-	return func(t *Transaction, s []string) string {
-		result := f(t, s)
+func responseHandler(f handler) func(context.Context, []string) string {
+	return func(ctx context.Context, s []string) string {
+		result := f(ctx, s)
 		encoded, err := encode(result)
 		if err != nil {
 			return toRespError(err)
@@ -40,18 +41,18 @@ func responseHandler(f transactionalHandler) func(*Transaction, []string) string
 	}
 }
 
-func pingHandler(args []string) any {
+func pingHandler(ctx context.Context, args []string) any {
 	return RespStr("PONG")
 }
 
-func echoHandler(args []string) any {
+func echoHandler(ctx context.Context, args []string) any {
 	if len(args) == 0 {
 		return errors.New("not enough args provided")
 	}
 	return BulkStr(args[0])
 }
 
-func setHandler(args []string) any {
+func setHandler(ctx context.Context, args []string) any {
 	key := args[0]
 	var value any = args[1]
 
@@ -71,7 +72,7 @@ func setHandler(args []string) any {
 	return RespStr("OK")
 }
 
-func getHandler(args []string) any {
+func getHandler(ctx context.Context, args []string) any {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
@@ -84,7 +85,7 @@ func getHandler(args []string) any {
 	return BulkStr(value.(string))
 }
 
-func incrHandler(args []string) any {
+func incrHandler(ctx context.Context, args []string) any {
 	key := args[0]
 	value, found := db.get(key)
 	if !found {
@@ -98,7 +99,7 @@ func incrHandler(args []string) any {
 	return newValue
 }
 
-func configHandler(args []string) any {
+func configHandler(ctx context.Context, args []string) any {
 	if len(args) < 2 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -107,7 +108,7 @@ func configHandler(args []string) any {
 	return []BulkStr{BulkStr(key), BulkStr(value)}
 }
 
-func keysHandler(args []string) any {
+func keysHandler(ctx context.Context, args []string) any {
 	if len(args) < 1 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -119,7 +120,8 @@ func keysHandler(args []string) any {
 	return bulkKeys
 }
 
-func watchHandler(t *Transaction, args []string) any {
+func watchHandler(ctx context.Context, args []string) any {
+	t := ctx.Value("transaction").(*Transaction)
 	if *t != nil {
 		return fmt.Errorf("ERR WATCH inside MULTI is not allowed")
 	}

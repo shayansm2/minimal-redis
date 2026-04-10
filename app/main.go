@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -47,6 +48,7 @@ func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	var t Transaction
+	ctx := context.WithValue(context.Background(), "transaction", &t)
 
 	for {
 		buf := make([]byte, 4096)
@@ -67,7 +69,7 @@ func handleConnection(conn net.Conn) {
 			conn.Write([]byte(toRespError(UnknownCommandError)))
 			continue
 		}
-		out := handler(&t, args[1:])
+		out := handler(ctx, args[1:])
 		conn.Write([]byte(out))
 	}
 }

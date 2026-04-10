@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strconv"
@@ -16,7 +17,7 @@ func init() {
 	bgJobs = append(bgJobs, PushedElementsPublisherJob)
 }
 
-func lPushHandler(args []string) any {
+func lPushHandler(ctx context.Context, args []string) any {
 	if len(args) < 2 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -33,7 +34,7 @@ func lPushHandler(args []string) any {
 	return len(list)
 }
 
-func rPushHandler(args []string) any {
+func rPushHandler(ctx context.Context, args []string) any {
 	if len(args) < 2 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -47,7 +48,7 @@ func rPushHandler(args []string) any {
 	return len(list)
 }
 
-func lRangeHandler(args []string) any {
+func lRangeHandler(ctx context.Context, args []string) any {
 	if len(args) < 3 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -77,7 +78,7 @@ func lRangeHandler(args []string) any {
 	return result
 }
 
-func lLenHandler(args []string) any {
+func lLenHandler(ctx context.Context, args []string) any {
 	if len(args) < 1 {
 		return errors.New("ERR not enough args provided")
 	}
@@ -88,7 +89,7 @@ func lLenHandler(args []string) any {
 	return len(list)
 }
 
-func lPopHandler(args []string) any {
+func lPopHandler(ctx context.Context, args []string) any {
 	name := args[0]
 	count := 1
 	if len(args) > 1 {
@@ -112,7 +113,7 @@ func lPopHandler(args []string) any {
 	return bulks
 }
 
-func bLPopHandler(args []string) any {
+func bLPopHandler(ctx context.Context, args []string) any {
 	if len(args) < 2 {
 		return errors.New("ERR not enough args provided")
 	}

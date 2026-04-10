@@ -1,6 +1,9 @@
 package main
 
-import "errors"
+import (
+	"context"
+	"errors"
+)
 
 type Transaction []func() any
 
@@ -17,31 +20,26 @@ func (t *Transaction) commit() []string {
 	return result
 }
 
-type transactionalHandler func(*Transaction, []string) any
-
-func dummyTransactionHandler(f handler) transactionalHandler {
-	return func(t *Transaction, s []string) any {
-		return f(s)
-	}
-}
-
-func transactionHandler(f handler) transactionalHandler {
-	return func(t *Transaction, s []string) any {
+func transactionHandler(f handler) handler {
+	return func(ctx context.Context, s []string) any {
+		t := ctx.Value("transaction").(*Transaction)
 		if *t != nil {
-			t.addToQueue(func() any { return f(s) })
+			t.addToQueue(func() any { return f(ctx, s) })
 			return RespStr("QUEUED")
 		} else {
-			return f(s)
+			return f(ctx, s)
 		}
 	}
 }
 
-func multiHandler(t *Transaction, args []string) any {
+func multiHandler(ctx context.Context, args []string) any {
+	t := ctx.Value("transaction").(*Transaction)
 	*t = make(Transaction, 0)
 	return RespStr("OK")
 }
 
-func execHandler(t *Transaction, args []string) any {
+func execHandler(ctx context.Context, args []string) any {
+	t := ctx.Value("transaction").(*Transaction)
 	if *t == nil {
 		return errors.New("ERR EXEC without MULTI")
 	}
@@ -50,7 +48,8 @@ func execHandler(t *Transaction, args []string) any {
 	return result
 }
 
-func discardHandler(t *Transaction, args []string) any {
+func discardHandler(ctx context.Context, args []string) any {
+	t := ctx.Value("transaction").(*Transaction)
 	if *t == nil {
 		return errors.New("ERR DISCARD without MULTI")
 	}
