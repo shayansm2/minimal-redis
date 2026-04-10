@@ -3,4 +3,4 @@
 - [x] resp array encode and decode
 - [x] incr not working when data loads from rdb
 - ~~cancel ctx to bg jobs~~
-- [ ] remove bg jobs fo blpop and make the lpush and rpush do the work. it's simpler
+- [x] remove bg jobs fo blpop and make the lpush and rpush do the work. it's simpler

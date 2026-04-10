@@ -12,9 +12,12 @@ import (
 var subscribeChannels map[string]*LinkedList[chan<- string]
 var mu sync.Mutex
 
+var pushEvents chan string
+
 func init() {
 	subscribeChannels = make(map[string]*LinkedList[chan<- string])
-	bgJobs = append(bgJobs, PushedElementsPublisherJob)
+	bgJobs = append(bgJobs, listPushPublisherJob)
+	pushEvents = make(chan string)
 }
 
 func lPushHandler(ctx context.Context, args []string) any {
@@ -28,8 +31,11 @@ func lPushHandler(ctx context.Context, args []string) any {
 
 	list, _ := getListFromDB(name)
 	list = append(elements, list...)
-
 	db.set(name, list)
+
+	for range elements {
+		pushEvents <- name
+	}
 
 	return len(list)
 }
@@ -42,8 +48,11 @@ func rPushHandler(ctx context.Context, args []string) any {
 
 	list, _ := getListFromDB(name)
 	list = append(list, args[1:]...)
-
 	db.set(name, list)
+
+	for range args[1:] {
+		pushEvents <- name
+	}
 
 	return len(list)
 }
@@ -118,6 +127,11 @@ func bLPopHandler(ctx context.Context, args []string) any {
 		return errors.New("ERR not enough args provided")
 	}
 	name := args[0]
+	pop := lPopHandler(ctx, []string{name})
+	if pop != nil {
+		return []BulkStr{BulkStr(name), pop.(BulkStr)}
+	}
+
 	timeout, _ := strconv.ParseFloat(args[1], 64)
 	ch := make(chan string, 0)
 	id := subscribeToListPush(name, ch)
@@ -161,25 +175,24 @@ func unsubscribeToListPush(name string, id int) {
 	subscribeChannels[name].del(id)
 }
 
-func PushedElementsPublisherJob() {
+func listPushPublisherJob() {
 	for {
+		name := <-pushEvents
 		mu.Lock()
-		for name, chans := range subscribeChannels {
-			if chans.isEmpty() {
-				continue
-			}
-			list, found := getListFromDB(name)
-			if !found || len(list) == 0 {
-				continue
-			}
-			pop := list[0]
-			list = list[1:]
-			ch := chans.pop()
-			ch <- pop
-			close(ch)
-			db.set(name, list)
-			subscribeChannels[name] = chans
+		chans, found := subscribeChannels[name]
+		if !found || chans.isEmpty() {
+			mu.Unlock()
+			continue
 		}
+		list, _ := getListFromDB(name)
+		pop := list[0]
+		list = list[1:]
+		db.set(name, list)
+
+		ch := chans.pop()
+		ch <- pop
+		close(ch)
+
 		mu.Unlock()
 	}
 }
