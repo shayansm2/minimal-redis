@@ -4,3 +4,5 @@
 - [x] incr not working when data loads from rdb
 - ~~cancel ctx to bg jobs~~
 - [x] remove bg jobs fo blpop and make the lpush and rpush do the work. it's simpler
+- [ ] validate command but not run when in transaction
+- [ ] divide linked list test

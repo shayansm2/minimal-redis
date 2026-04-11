@@ -27,6 +27,7 @@ var handlers = map[string]func(context.Context, []string) string{
 	"WATCH":   responseHandler(watchHandler),
 	"UNWATCH": responseHandler(unwatchHandler),
 	"TYPE":    responseHandler(typeHandler),
+	"XADD":    responseHandler(xAddHandler),
 }
 
 type handler func(context.Context, []string) any
@@ -122,13 +123,19 @@ func keysHandler(ctx context.Context, args []string) any {
 }
 
 const TypeString = "string"
+const TypeStream = "stream"
 const TypeNone = "none"
 
 func typeHandler(ctx context.Context, args []string) any {
 	key := args[0]
-	_, found := db.get(key)
+	val, found := db.get(key)
 	if !found {
 		return RespStr(TypeNone)
 	}
-	return RespStr(TypeString)
+	switch val.(type) {
+	case *Stream:
+		return RespStr(TypeStream)
+	default:
+		return RespStr(TypeString)
+	}
 }
