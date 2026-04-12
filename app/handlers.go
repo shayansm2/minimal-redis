@@ -28,6 +28,7 @@ var handlers = map[string]func(context.Context, []string) string{
 	"UNWATCH": responseHandler(unwatchHandler),
 	"TYPE":    responseHandler(typeHandler),
 	"XADD":    responseHandler(xAddHandler),
+	"XRANGE":  responseHandler(xRangeHandler),
 }
 
 type handler func(context.Context, []string) any

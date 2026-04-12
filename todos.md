@@ -6,3 +6,4 @@
 - [x] remove bg jobs fo blpop and make the lpush and rpush do the work. it's simpler
 - [ ] validate command but not run when in transaction
 - [ ] divide linked list test
+- [ ] remove linked list from subscribers list and use normal arrays instead. even use binary search for finding ids.
