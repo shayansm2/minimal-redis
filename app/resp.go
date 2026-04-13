@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 )
@@ -65,14 +66,6 @@ func toBulkString(str BulkStr) string {
 	return fmt.Sprintf("$%d\r\n%s\r\n", len(str), str)
 }
 
-func toBulkArray(arr []BulkStr) []string {
-	result := make([]string, len(arr))
-	for i, str := range arr {
-		result[i] = toBulkString(str)
-	}
-	return result
-}
-
 var BulkDecodeError = errors.New("not a valid bulk string")
 
 func bulkStringDecode(str string) (string, error) {
@@ -100,22 +93,36 @@ func encode(value any) (string, error) {
 		return NullBulkString, nil
 	}
 	switch v := value.(type) {
+	case error:
+		return toRespError(v), nil
 	case int:
 		return toRespInteger(v), nil
 	case RespStr:
 		return toRespSimpleString(v), nil
 	case BulkStr:
 		return toBulkString(v), nil
-	case []BulkStr:
-		return toRespArray(toBulkArray(v)), nil
 	case []string:
 		if v == nil {
 			return NullArray, nil
 		}
 		return toRespArray(v), nil
-	case error:
-		return toRespError(v), nil
 	default:
-		return "", fmt.Errorf("Err not implemented type")
+		rv := reflect.ValueOf(value)
+
+		if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
+			if rv.IsNil() {
+				return NullArray, nil
+			}
+
+			arr := make([]string, rv.Len())
+			for i := 0; i < rv.Len(); i++ {
+				elem := rv.Index(i).Interface()
+				encoded, _ := encode(elem)
+				arr[i] = encoded
+			}
+			return toRespArray(arr), nil
+		}
+
+		return "", fmt.Errorf("Err not implemented type: %T", value)
 	}
 }

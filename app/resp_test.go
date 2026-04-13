@@ -83,7 +83,39 @@ func TestEncode(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "$2\r\nhi\r\n", val)
 
+}
+
+func TestArrayEncode(t *testing.T) {
 	var nullArr []string
-	val, err = encode(nullArr)
+	val, err := encode(nullArr)
 	assert.Equal(t, NullArray, val)
+
+	expected := "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
+	encoded, err := encode([]BulkStr{"hello", "world"})
+	assert.Nil(t, err)
+	assert.Equal(t, expected, encoded)
+
+	encoded, err = encode([]string{})
+	assert.Nil(t, err)
+	assert.Equal(t, "*0\r\n", encoded)
+
+	expected = "*3\r\n:1\r\n:2\r\n:3\r\n"
+	encoded, err = encode([]int{1, 2, 3})
+	assert.Nil(t, err)
+	assert.Equal(t, expected, encoded)
+
+	raw := []interface{}{
+		[]interface{}{
+			BulkStr("0-2"),
+			[]BulkStr{"bar", "baz"},
+		},
+		[]interface{}{
+			BulkStr("0-3"),
+			[]BulkStr{"baz", "foo"},
+		},
+	}
+	expected = "*2\r\n*2\r\n$3\r\n0-2\r\n*2\r\n$3\r\nbar\r\n$3\r\nbaz\r\n*2\r\n$3\r\n0-3\r\n*2\r\n$3\r\nbaz\r\n$3\r\nfoo\r\n"
+	val, err = encode(raw)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, val)
 }

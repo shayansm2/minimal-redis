@@ -1,0 +1,216 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"strconv"
+	"sync"
+	"time"
+)
+
+var pushToListEvents chan string
+
+type Notifier struct {
+	id int
+	f  func(string)
+}
+
+var pushToListSubscribers struct {
+	notifiers map[string][]Notifier
+	mu        sync.Mutex
+}
+
+func init() {
+	pushToListEvents = make(chan string)
+	pushToListSubscribers = struct {
+		notifiers map[string][]Notifier
+		mu        sync.Mutex
+	}{notifiers: make(map[string][]Notifier)}
+	bgJobs = append(bgJobs, pushToListPublisherJob)
+}
+
+func lPushHandler(ctx context.Context, args []string) any {
+	if len(args) < 2 {
+		return errors.New("ERR not enough args provided")
+	}
+	name := args[0]
+	elements := make([]string, len(args)-1)
+	copy(elements, args[1:])
+	slices.Reverse(elements)
+
+	list, _ := getListFromDB(name)
+	list = append(elements, list...)
+	db.set(name, list)
+
+	for range elements {
+		pushToListEvents <- name
+	}
+
+	return len(list)
+}
+
+func rPushHandler(ctx context.Context, args []string) any {
+	if len(args) < 2 {
+		return errors.New("ERR not enough args provided")
+	}
+	name := args[0]
+
+	list, _ := getListFromDB(name)
+	list = append(list, args[1:]...)
+	db.set(name, list)
+
+	for range args[1:] {
+		pushToListEvents <- name
+	}
+
+	return len(list)
+}
+
+func lRangeHandler(ctx context.Context, args []string) any {
+	if len(args) < 3 {
+		return errors.New("ERR not enough args provided")
+	}
+	list, found := getListFromDB(args[0])
+	if !found {
+		return []BulkStr{}
+	}
+
+	start, _ := strconv.Atoi(args[1])
+	stop, _ := strconv.Atoi(args[2])
+
+	if start < 0 {
+		start = max(start+len(list), 0)
+	}
+	if stop < 0 {
+		stop = max(stop+len(list), 0)
+	}
+	stop++ // make exclusive
+	if start >= len(list) || start >= stop {
+		return []BulkStr{}
+	}
+	stop = min(stop, len(list))
+	result := make([]BulkStr, stop-start)
+	for i, val := range list[start:stop] {
+		result[i] = BulkStr(val)
+	}
+	return result
+}
+
+func lLenHandler(ctx context.Context, args []string) any {
+	if len(args) < 1 {
+		return errors.New("ERR not enough args provided")
+	}
+	list, found := getListFromDB(args[0])
+	if !found {
+		return 0
+	}
+	return len(list)
+}
+
+func lPopHandler(ctx context.Context, args []string) any {
+	name := args[0]
+	count := 1
+	if len(args) > 1 {
+		count, _ = strconv.Atoi(args[1])
+	}
+	list, found := getListFromDB(args[0])
+	if !found || len(list) == 0 {
+		return nil
+	}
+	pops := list[:count]
+	list = list[count:]
+	db.set(name, list)
+
+	bulks := make([]BulkStr, len(pops))
+	for i, pop := range pops {
+		bulks[i] = BulkStr(pop)
+	}
+	if count == 1 {
+		return bulks[0]
+	}
+	return bulks
+}
+
+func bLPopHandler(ctx context.Context, args []string) any {
+	if len(args) < 2 {
+		return errors.New("ERR not enough args provided")
+	}
+	name := args[0]
+	pop := lPopHandler(ctx, []string{name})
+	if pop != nil {
+		return []BulkStr{BulkStr(name), pop.(BulkStr)}
+	}
+
+	timeout, _ := strconv.ParseFloat(args[1], 64)
+	ch := make(chan string, 0)
+	id := subscribeToListPush(name, func(s string) { ch <- s; close(ch) })
+	if timeout == 0 {
+		pop := <-ch
+		return []BulkStr{BulkStr(name), BulkStr(pop)}
+	}
+
+	select {
+	case pop := <-ch:
+		return []BulkStr{BulkStr(name), BulkStr(pop)}
+	case <-time.After(time.Millisecond * time.Duration(1000*timeout)):
+		unsubscribeToListPush(name, id)
+		close(ch)
+		var nullArr []string
+		return nullArr
+	}
+}
+
+func getListFromDB(name string) (list []string, found bool) {
+	l, found := db.get(name)
+	if !found {
+		return
+	}
+	list = l.([]string)
+	return
+}
+
+func subscribeToListPush(name string, f func(string)) int {
+	pushToListSubscribers.mu.Lock()
+	defer pushToListSubscribers.mu.Unlock()
+	var id int
+	notifiers, found := pushToListSubscribers.notifiers[name]
+	if !found {
+		notifiers = make([]Notifier, 0)
+		id = 0
+	} else {
+		id = notifiers[len(notifiers)-1].id
+	}
+	id++
+	notifiers = append(notifiers, Notifier{id, f})
+	return id
+}
+
+func unsubscribeToListPush(name string, id int) {
+	pushToListSubscribers.mu.Lock()
+	defer pushToListSubscribers.mu.Unlock()
+	pushToListSubscribers.notifiers[name].del(id)
+}
+
+func pushToListPublisherJob() {
+	for {
+		name := <-pushToListEvents
+		pushToListSubscribers.mu.Lock()
+		notifiers, found := pushToListSubscribers.notifiers[name]
+		if !found || len(notifiers) == 0 {
+			pushToListSubscribers.mu.Unlock()
+			continue
+		}
+		list, _ := getListFromDB(name)
+		pop := list[0]
+		list = list[1:]
+		db.set(name, list)
+
+		notif := notifiers[0]
+		notifiers = notifiers[1:]
+		pushToListSubscribers.notifiers[name] = notifiers
+		notif.f(pop)
+
+		pushToListSubscribers.mu.Unlock()
+	}
+}

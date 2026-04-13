@@ -71,6 +71,23 @@ func geIdx(stream *Stream, id ID) int {
 	return e + 1
 }
 
+func gdIdx(stream *Stream, id ID) int {
+	s, e := 0, len(*stream)-1
+	for s <= e {
+		m := (s + e) / 2
+		i := (*stream)[m].id
+		if i.eq(id) {
+			return m + 1
+		}
+		if i.gt(id) {
+			e = m - 1
+		} else {
+			s = m + 1
+		}
+	}
+	return e + 1
+}
+
 func getStream(key string) *Stream {
 	s, found := db.get(key)
 	if !found {
@@ -94,10 +111,13 @@ func xAddHandler(ctx context.Context, args []string) any {
 	}
 
 	*stream = append(*stream, Entry{id: *id, kv: kv})
+
 	db.set(key, stream)
+
 	return BulkStr(id.toStr())
 }
 
+// hard to refactor and change
 func getValidNewId(stream *Stream, id string) (*ID, error) {
 	lastId := ID{0, 0}
 	if id == lastId.toStr() {
@@ -139,7 +159,7 @@ func getValidNewId(stream *Stream, id string) (*ID, error) {
 	return nil, errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 }
 
-func strToId(id string) ID {
+func getQueryId(id string) ID {
 	if !strings.Contains(id, "-") {
 		msTime, _ := strconv.Atoi(id)
 		return ID{int64(msTime), 0}
@@ -158,26 +178,41 @@ func xRangeHandler(ctx context.Context, args []string) any {
 	if args[1] == "-" {
 		startIdx = 0
 	} else {
-		startIdx = geIdx(stream, strToId(args[1]))
+		startIdx = geIdx(stream, getQueryId(args[1]))
 	}
 
 	if args[2] == "+" {
 		endIdx = len(*stream)
 	} else {
-		endIdx = min(leIdx(stream, strToId(args[2]))+1, len(*stream))
+		endIdx = min(leIdx(stream, getQueryId(args[2]))+1, len(*stream))
 	}
 
-	result := make([]string, endIdx-startIdx)
-	for i, entry := range (*stream)[startIdx:endIdx] {
+	return toStreamResponse((*stream)[startIdx:endIdx])
+}
+
+func xReadHandler(ctx context.Context, args []string) any {
+	keyCount := (len(args) - 1) / 2
+	result := make([]any, keyCount)
+	for i := 1; i <= keyCount; i++ {
+		key := args[i]
+		stream := getStream(key)
+		id := getQueryId(args[keyCount+i])
+		idx := gdIdx(stream, id)
+		result[i-1] = []any{BulkStr(key), toStreamResponse((*stream)[idx:])}
+	}
+	return result
+}
+
+func toStreamResponse(stream []Entry) []any {
+	result := make([]any, len(stream))
+	for i, entry := range stream {
 		kvArray := make([]BulkStr, len(entry.kv)*2)
 		j := 0
 		for k, v := range entry.kv {
 			kvArray[j], kvArray[j+1] = BulkStr(k), BulkStr(v)
 			j += 2
 		}
-		idEncoded, _ := encode(BulkStr(entry.id.toStr()))
-		kvEncoded, _ := encode(kvArray)
-		result[i], _ = encode([]string{idEncoded, kvEncoded})
+		result[i] = []any{BulkStr(entry.id.toStr()), kvArray}
 	}
 	return result
 }

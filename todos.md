@@ -7,3 +7,5 @@
 - [ ] validate command but not run when in transaction
 - [ ] divide linked list test
 - [ ] remove linked list from subscribers list and use normal arrays instead. even use binary search for finding ids.
+- [x] recursive decode
+- [x] refactor streams
