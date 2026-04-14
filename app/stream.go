@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/codecrafters-io/redis-starter-go/app/utils"
@@ -38,11 +39,22 @@ type Stream struct {
 	kvs []map[string]string
 }
 
-// var addToStreamEvents chan string
+var addToStreamEvents chan string
 
-// func init() {
-// 	addToStreamEvents = make(chan string)
-// }
+var addToStreamSubscribers struct {
+	hooks map[string][]func(string)
+	mu    sync.Mutex
+}
+
+func init() {
+	addToStreamEvents = make(chan string)
+	addToStreamSubscribers = struct {
+		hooks map[string][]func(string)
+		mu    sync.Mutex
+	}{hooks: make(map[string][]func(string))}
+
+	bgJobs = append(bgJobs, addToStreamDispatcherJob)
+}
 
 func getStream(key string) *Stream {
 	s, found := db.get(key)
@@ -70,7 +82,7 @@ func xAddHandler(ctx context.Context, args []string) any {
 	stream.kvs = append(stream.kvs, kv)
 
 	db.set(key, stream)
-	// addToStreamEvents <- key
+	addToStreamEvents <- key
 
 	return BulkStr(id.toStr())
 }
@@ -151,16 +163,74 @@ func xRangeHandler(ctx context.Context, args []string) any {
 }
 
 func xReadHandler(ctx context.Context, args []string) any {
-	keyCount := (len(args) - 1) / 2
-	result := make([]any, keyCount)
-	for i := 1; i <= keyCount; i++ {
-		key := args[i]
-		stream := getStream(key)
-		id := getQueryId(args[keyCount+i])
-		idx := utils.GreaterThanIndex(stream.ids, id)
-		result[i-1] = []any{BulkStr(key), toStreamResponse(stream.ids[idx:], stream.kvs[idx:])}
+	shift := 1
+	msTimeout := 0
+	mode := "synchronous"
+	if strings.ToUpper(args[0]) == "BLOCK" {
+		shift = 3
+		msTimeout, _ = strconv.Atoi(args[1])
+		mode = "blocking"
 	}
-	return result
+
+	keyCount := (len(args) - shift) / 2
+	keys := make([]string, keyCount)
+	ids := make([]ID, keyCount)
+	for i := 0; i < keyCount; i++ {
+		key := args[shift+i]
+		id := getQueryId(args[keyCount+shift+i])
+		keys[i] = key
+		ids[i] = id
+	}
+
+	result := make([]any, 0)
+	for i, key := range keys {
+		stream := getStream(key)
+		idx := utils.GreaterThanIndex(stream.ids, ids[i])
+		if idx == len(stream.ids) {
+			continue
+		}
+		result = append(result, []any{
+			BulkStr(key),
+			toStreamResponse(stream.ids[idx:], stream.kvs[idx:]),
+		})
+	}
+
+	if len(result) != 0 || mode == "synchronous" {
+		return result
+	}
+
+	ch := make(chan string)
+	keySubscriptionIdPair := make(map[string]int)
+	for _, key := range keys {
+		id := subscribeToStreamAdd(key, func(s string) { ch <- s })
+		keySubscriptionIdPair[key] = id
+	}
+
+	if msTimeout == 0 {
+		key := <-ch
+		stream := getStream(key)
+		idx := len(stream.ids) - 1
+		return []any{[]any{
+			BulkStr(key),
+			toStreamResponse(stream.ids[idx:], stream.kvs[idx:]),
+		}}
+	}
+
+	select {
+	case key := <-ch:
+		stream := getStream(key)
+		idx := len(stream.ids) - 1
+		return []any{[]any{
+			BulkStr(key),
+			toStreamResponse(stream.ids[idx:], stream.kvs[idx:]),
+		}}
+	case <-time.After(time.Millisecond * time.Duration(msTimeout)):
+		for key, id := range keySubscriptionIdPair {
+			unsubscribeFromStreamAdd(key, id)
+		}
+		var nullArr []string
+		return nullArr
+	}
 }
 
 func toStreamResponse(ids []ID, kvs []map[string]string) []any {
@@ -176,4 +246,36 @@ func toStreamResponse(ids []ID, kvs []map[string]string) []any {
 		result[i] = []any{BulkStr(id.toStr()), kvArray}
 	}
 	return result
+}
+
+func subscribeToStreamAdd(name string, f func(string)) int {
+	addToStreamSubscribers.mu.Lock()
+	defer addToStreamSubscribers.mu.Unlock()
+	hooks, found := addToStreamSubscribers.hooks[name]
+	if !found {
+		hooks = make([]func(string), 0)
+	}
+	hooks = append(hooks, f)
+	addToStreamSubscribers.hooks[name] = hooks
+	return len(hooks) - 1
+}
+
+func unsubscribeFromStreamAdd(name string, id int) {
+	addToStreamSubscribers.mu.Lock()
+	defer addToStreamSubscribers.mu.Unlock()
+	hooks := addToStreamSubscribers.hooks[name]
+	hooks = append(hooks[:id], hooks[id+1:]...)
+	addToStreamSubscribers.hooks[name] = hooks
+}
+
+func addToStreamDispatcherJob() {
+	for {
+		key := <-addToStreamEvents
+		addToStreamSubscribers.mu.Lock()
+		for _, f := range addToStreamSubscribers.hooks[key] {
+			f(key)
+		}
+		delete(addToStreamSubscribers.hooks, key)
+		addToStreamSubscribers.mu.Unlock()
+	}
 }

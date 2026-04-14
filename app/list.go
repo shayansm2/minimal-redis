@@ -151,7 +151,7 @@ func bLPopHandler(ctx context.Context, args []string) any {
 	case pop := <-ch:
 		return []BulkStr{BulkStr(name), BulkStr(pop)}
 	case <-time.After(time.Millisecond * time.Duration(1000*timeout)):
-		unsubscribeToListPush(name, id)
+		unsubscribeFromListPush(name, id)
 		close(ch)
 		var nullArr []string
 		return nullArr
@@ -176,7 +176,7 @@ func subscribeToListPush(name string, f func(string)) int {
 	return pushToListSubscribers.notifiers[name].Push(f)
 }
 
-func unsubscribeToListPush(name string, id int) {
+func unsubscribeFromListPush(name string, id int) {
 	pushToListSubscribers.mu.Lock()
 	defer pushToListSubscribers.mu.Unlock()
 	pushToListSubscribers.notifiers[name].Del(id)
