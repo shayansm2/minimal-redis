@@ -11,10 +11,6 @@ type Configs map[string]string
 var configs Configs
 var once sync.Once
 
-func init() {
-
-}
-
 func getConfigs() Configs {
 	once.Do(loadConfigs)
 	return configs

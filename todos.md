@@ -1,11 +1,13 @@
 - [x] why cannot run anything inside redis-cli?
-- [x] isInTransaction is shared for all connections
+- [x] `isInTransaction` is shared for all connections
 - [x] resp array encode and decode
-- [x] incr not working when data loads from rdb
-- ~~cancel ctx to bg jobs~~
-- [x] remove bg jobs fo blpop and make the lpush and rpush do the work. it's simpler
+- [x] `INCR` not working when data loads from rdb
+- [ ] ~~cancel ctx to bg jobs~~
+- [x] remove bg jobs fo `BLPOP` and make the `LPUSH` and `RPUSH` do the work. it's simpler
 - [ ] validate command but not run when in transaction
 - [ ] divide linked list test
-- [ ] remove linked list from subscribers list and use normal arrays instead. even use binary search for finding ids.
+- [ ] ~~remove linked list from subscribers list and use normal arrays instead. even use binary search for finding ids.~~
 - [x] recursive decode
 - [x] refactor streams
+- [ ] context cancel for blocking commands like `BLPOP` and `XREAD`
+- [x] move binary search and linked list to utils

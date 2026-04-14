@@ -11,22 +11,32 @@ import (
 
 var pushToListEvents chan string
 
-type Notifier struct {
-	id int
-	f  func(string)
+type hookId int
+
+func (id hookId) gt(other hookId) bool {
+	return id > other
+}
+
+func (id hookId) eq(other hookId) bool {
+	return id == other
 }
 
 var pushToListSubscribers struct {
-	notifiers map[string][]Notifier
-	mu        sync.Mutex
+	ids   map[string][]hookId
+	hooks map[string][]func(string)
+	mu    sync.Mutex
 }
 
 func init() {
 	pushToListEvents = make(chan string)
 	pushToListSubscribers = struct {
-		notifiers map[string][]Notifier
-		mu        sync.Mutex
-	}{notifiers: make(map[string][]Notifier)}
+		ids   map[string][]hookId
+		hooks map[string][]func(string)
+		mu    sync.Mutex
+	}{
+		ids:   make(map[string][]hookId),
+		hooks: make(map[string][]func(string)),
+	}
 	bgJobs = append(bgJobs, pushToListPublisherJob)
 }
 
@@ -174,7 +184,7 @@ func subscribeToListPush(name string, f func(string)) int {
 	pushToListSubscribers.mu.Lock()
 	defer pushToListSubscribers.mu.Unlock()
 	var id int
-	notifiers, found := pushToListSubscribers.notifiers[name]
+	notifiers, found := pushToListSubscribers.hooks[name]
 	if !found {
 		notifiers = make([]Notifier, 0)
 		id = 0
@@ -189,14 +199,16 @@ func subscribeToListPush(name string, f func(string)) int {
 func unsubscribeToListPush(name string, id int) {
 	pushToListSubscribers.mu.Lock()
 	defer pushToListSubscribers.mu.Unlock()
-	pushToListSubscribers.notifiers[name].del(id)
+	idx := binarySearch(pushToListSubscribers.ids[name], hookId(id))
+	pushToListSubscribers.ids[name] = append(pushToListSubscribers.ids[name][0:idx], pushToListSubscribers.ids[name][idx+1:]...)
+	pushToListSubscribers.ids[name] = append(pushToListSubscribers.ids[name][0:idx], pushToListSubscribers.ids[name][idx+1:]...)
 }
 
 func pushToListPublisherJob() {
 	for {
 		name := <-pushToListEvents
 		pushToListSubscribers.mu.Lock()
-		notifiers, found := pushToListSubscribers.notifiers[name]
+		notifiers, found := pushToListSubscribers.hooks[name]
 		if !found || len(notifiers) == 0 {
 			pushToListSubscribers.mu.Unlock()
 			continue
@@ -206,10 +218,11 @@ func pushToListPublisherJob() {
 		list = list[1:]
 		db.set(name, list)
 
-		notif := notifiers[0]
+		f := notifiers[0]
 		notifiers = notifiers[1:]
-		pushToListSubscribers.notifiers[name] = notifiers
-		notif.f(pop)
+		pushToListSubscribers.hooks[name] = notifiers
+		pushToListSubscribers.ids[name] = pushToListSubscribers.ids[name][1:]
+		f(pop)
 
 		pushToListSubscribers.mu.Unlock()
 	}

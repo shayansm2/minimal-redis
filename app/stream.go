@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/codecrafters-io/redis-starter-go/app/utils"
 )
 
 type ID struct {
@@ -14,15 +16,11 @@ type ID struct {
 	seqNum int
 }
 
-func (id ID) gt(other ID) bool {
+func (id ID) Gt(other ID) bool {
 	return (id.msTime > other.msTime) || (id.msTime == other.msTime && id.seqNum > other.seqNum)
 }
 
-func (id ID) lt(other ID) bool {
-	return (id.msTime < other.msTime) || (id.msTime == other.msTime && id.seqNum < other.seqNum)
-}
-
-func (id ID) eq(other ID) bool {
+func (id ID) Eq(other ID) bool {
 	return id.msTime == other.msTime && id.seqNum == other.seqNum
 }
 
@@ -35,58 +33,16 @@ type Entry struct {
 	kv map[string]string
 }
 
-type Stream []Entry
-
-func leIdx(stream *Stream, id ID) int {
-	s, e := 0, len(*stream)-1
-	for s <= e {
-		m := (s + e) / 2
-		i := (*stream)[m].id
-		if i.eq(id) {
-			return m
-		}
-		if i.gt(id) {
-			e = m - 1
-		} else {
-			s = m + 1
-		}
-	}
-	return s - 1
+type Stream struct {
+	ids []ID
+	kvs []map[string]string
 }
 
-func geIdx(stream *Stream, id ID) int {
-	s, e := 0, len(*stream)-1
-	for s <= e {
-		m := (s + e) / 2
-		i := (*stream)[m].id
-		if i.eq(id) {
-			return m
-		}
-		if i.gt(id) {
-			e = m - 1
-		} else {
-			s = m + 1
-		}
-	}
-	return e + 1
-}
+// var addToStreamEvents chan string
 
-func gdIdx(stream *Stream, id ID) int {
-	s, e := 0, len(*stream)-1
-	for s <= e {
-		m := (s + e) / 2
-		i := (*stream)[m].id
-		if i.eq(id) {
-			return m + 1
-		}
-		if i.gt(id) {
-			e = m - 1
-		} else {
-			s = m + 1
-		}
-	}
-	return e + 1
-}
+// func init() {
+// 	addToStreamEvents = make(chan string)
+// }
 
 func getStream(key string) *Stream {
 	s, found := db.get(key)
@@ -100,7 +56,7 @@ func xAddHandler(ctx context.Context, args []string) any {
 	key := args[0]
 	stream := getStream(key)
 
-	id, err := getValidNewId(stream, args[1])
+	id, err := getNewValidId(stream, args[1])
 	if err != nil {
 		return err
 	}
@@ -110,21 +66,23 @@ func xAddHandler(ctx context.Context, args []string) any {
 		kv[args[i]] = args[i+1]
 	}
 
-	*stream = append(*stream, Entry{id: *id, kv: kv})
+	stream.ids = append(stream.ids, *id)
+	stream.kvs = append(stream.kvs, kv)
 
 	db.set(key, stream)
+	// addToStreamEvents <- key
 
 	return BulkStr(id.toStr())
 }
 
 // hard to refactor and change
-func getValidNewId(stream *Stream, id string) (*ID, error) {
+func getNewValidId(stream *Stream, id string) (*ID, error) {
 	lastId := ID{0, 0}
 	if id == lastId.toStr() {
 		return nil, errors.New("ERR The ID specified in XADD must be greater than 0-0")
 	}
-	if len(*stream) > 0 {
-		lastId = (*stream)[len(*stream)-1].id
+	if len(stream.ids) > 0 {
+		lastId = stream.ids[len(stream.ids)-1]
 	}
 
 	var msTime int64
@@ -178,16 +136,18 @@ func xRangeHandler(ctx context.Context, args []string) any {
 	if args[1] == "-" {
 		startIdx = 0
 	} else {
-		startIdx = geIdx(stream, getQueryId(args[1]))
+		id := getQueryId(args[1])
+		startIdx = utils.GreaterEqualIndex(stream.ids, id)
 	}
 
 	if args[2] == "+" {
-		endIdx = len(*stream)
+		endIdx = len(stream.ids)
 	} else {
-		endIdx = min(leIdx(stream, getQueryId(args[2]))+1, len(*stream))
+		id := getQueryId(args[2])
+		endIdx = min(utils.LessEqualIndex(stream.ids, id)+1, len(stream.ids))
 	}
 
-	return toStreamResponse((*stream)[startIdx:endIdx])
+	return toStreamResponse(stream.ids[startIdx:endIdx], stream.kvs[startIdx:endIdx])
 }
 
 func xReadHandler(ctx context.Context, args []string) any {
@@ -197,22 +157,23 @@ func xReadHandler(ctx context.Context, args []string) any {
 		key := args[i]
 		stream := getStream(key)
 		id := getQueryId(args[keyCount+i])
-		idx := gdIdx(stream, id)
-		result[i-1] = []any{BulkStr(key), toStreamResponse((*stream)[idx:])}
+		idx := utils.GreaterThanIndex(stream.ids, id)
+		result[i-1] = []any{BulkStr(key), toStreamResponse(stream.ids[idx:], stream.kvs[idx:])}
 	}
 	return result
 }
 
-func toStreamResponse(stream []Entry) []any {
-	result := make([]any, len(stream))
-	for i, entry := range stream {
-		kvArray := make([]BulkStr, len(entry.kv)*2)
+func toStreamResponse(ids []ID, kvs []map[string]string) []any {
+	result := make([]any, len(ids))
+	for i, id := range ids {
+		kv := kvs[i]
+		kvArray := make([]BulkStr, len(kv)*2)
 		j := 0
-		for k, v := range entry.kv {
+		for k, v := range kv {
 			kvArray[j], kvArray[j+1] = BulkStr(k), BulkStr(v)
 			j += 2
 		}
-		result[i] = []any{BulkStr(entry.id.toStr()), kvArray}
+		result[i] = []any{BulkStr(id.toStr()), kvArray}
 	}
 	return result
 }

@@ -1,4 +1,4 @@
-package main
+package utils
 
 type Node[T any] struct {
 	id   int
@@ -15,7 +15,7 @@ func NewLinkedList[T any]() *LinkedList[T] {
 	return &LinkedList[T]{head: nil, tail: nil}
 }
 
-func (l *LinkedList[T]) push(val T) int {
+func (l *LinkedList[T]) Push(val T) int {
 	if l.tail == nil {
 		new := Node[T]{id: 1, val: val, next: nil}
 		l.head = &new
@@ -28,7 +28,7 @@ func (l *LinkedList[T]) push(val T) int {
 	return l.tail.id
 }
 
-func (l *LinkedList[T]) pop() T {
+func (l *LinkedList[T]) Pop() T {
 	pop := l.head.val
 	l.head = l.head.next
 	if l.head == nil {
@@ -37,7 +37,7 @@ func (l *LinkedList[T]) pop() T {
 	return pop
 }
 
-func (l *LinkedList[T]) del(id int) {
+func (l *LinkedList[T]) Del(id int) {
 	var prev *Node[T] = nil
 	node := l.head
 	for node.id < id {
@@ -57,6 +57,6 @@ func (l *LinkedList[T]) del(id int) {
 	}
 }
 
-func (l *LinkedList[T]) isEmpty() bool {
+func (l *LinkedList[T]) IsEmpty() bool {
 	return l.head == nil
 }

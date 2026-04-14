@@ -7,21 +7,23 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/codecrafters-io/redis-starter-go/app/utils"
 )
 
 var pushToListEvents chan string
 
 var pushToListSubscribers struct {
-	notifiers map[string]*LinkedList[func(string)]
+	notifiers map[string]*utils.LinkedList[func(string)]
 	mu        sync.Mutex
 }
 
 func init() {
 	pushToListEvents = make(chan string)
 	pushToListSubscribers = struct {
-		notifiers map[string]*LinkedList[func(string)]
+		notifiers map[string]*utils.LinkedList[func(string)]
 		mu        sync.Mutex
-	}{notifiers: make(map[string]*LinkedList[func(string)])}
+	}{notifiers: make(map[string]*utils.LinkedList[func(string)])}
 	bgJobs = append(bgJobs, pushToListPublisherJob)
 }
 
@@ -169,15 +171,15 @@ func subscribeToListPush(name string, f func(string)) int {
 	pushToListSubscribers.mu.Lock()
 	defer pushToListSubscribers.mu.Unlock()
 	if _, found := pushToListSubscribers.notifiers[name]; !found {
-		pushToListSubscribers.notifiers[name] = NewLinkedList[func(string)]()
+		pushToListSubscribers.notifiers[name] = utils.NewLinkedList[func(string)]()
 	}
-	return pushToListSubscribers.notifiers[name].push(f)
+	return pushToListSubscribers.notifiers[name].Push(f)
 }
 
 func unsubscribeToListPush(name string, id int) {
 	pushToListSubscribers.mu.Lock()
 	defer pushToListSubscribers.mu.Unlock()
-	pushToListSubscribers.notifiers[name].del(id)
+	pushToListSubscribers.notifiers[name].Del(id)
 }
 
 func pushToListPublisherJob() {
@@ -185,7 +187,7 @@ func pushToListPublisherJob() {
 		name := <-pushToListEvents
 		pushToListSubscribers.mu.Lock()
 		notifiers, found := pushToListSubscribers.notifiers[name]
-		if !found || notifiers.isEmpty() {
+		if !found || notifiers.IsEmpty() {
 			pushToListSubscribers.mu.Unlock()
 			continue
 		}
@@ -194,7 +196,7 @@ func pushToListPublisherJob() {
 		list = list[1:]
 		db.set(name, list)
 
-		f := notifiers.pop()
+		f := notifiers.Pop()
 		f(pop)
 
 		pushToListSubscribers.mu.Unlock()
