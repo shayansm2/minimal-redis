@@ -30,6 +30,7 @@ var handlers = map[string]func(context.Context, []string) string{
 	"XADD":    responseHandler(xAddHandler),
 	"XRANGE":  responseHandler(xRangeHandler),
 	"XREAD":   responseHandler(xReadHandler),
+	"INFO":    responseHandler(infoHandler),
 }
 
 type handler func(context.Context, []string) any
