@@ -10,6 +10,12 @@ import (
 
 var bgJobs []func()
 
+var port string
+
+func init() {
+	port = getConfigs().get("port", "6379")
+}
+
 func main() {
 	err := loadRDB()
 	if err != nil {
@@ -27,9 +33,9 @@ func main() {
 }
 
 func initTcpServer() error {
-	listener, err := net.Listen("tcp", "0.0.0.0:6379")
+	listener, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%v", port))
 	if err != nil {
-		return fmt.Errorf("Failed to bind to port 6379")
+		return fmt.Errorf("Failed to bind to port %v", port)
 	}
 	defer listener.Close()
 

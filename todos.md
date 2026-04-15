@@ -5,7 +5,7 @@
 - [ ] ~~cancel ctx to bg jobs~~
 - [x] remove bg jobs fo `BLPOP` and make the `LPUSH` and `RPUSH` do the work. it's simpler
 - [ ] validate command but not run when in transaction
-- [ ] divide linked list test
+- [x] divide linked list test
 - [ ] ~~remove linked list from subscribers list and use normal arrays instead. even use binary search for finding ids.~~
 - [x] recursive decode
 - [x] refactor streams

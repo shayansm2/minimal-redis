@@ -6,9 +6,13 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestLinkedList(t *testing.T) {
+func TestEmptyLinkedList(t *testing.T) {
 	l := NewLinkedList[string]()
 	assert.True(t, l.IsEmpty())
+}
+
+func TestLinkedListPushPop(t *testing.T) {
+	l := NewLinkedList[string]()
 
 	l.Push("1")
 	assert.Equal(t, "1", l.Pop())
@@ -20,6 +24,10 @@ func TestLinkedList(t *testing.T) {
 	assert.False(t, l.IsEmpty())
 	assert.Equal(t, "2", l.Pop())
 	assert.True(t, l.IsEmpty())
+}
+
+func TestLinkedListDelete(t *testing.T) {
+	l := NewLinkedList[string]()
 
 	id := l.Push("1")
 	assert.False(t, l.IsEmpty())
