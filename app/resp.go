@@ -18,27 +18,31 @@ func respArrayBulkStringParse(str string) ([]string, error) {
 	if !found {
 		return nil, RespParseError
 	}
-	count, found := strings.CutPrefix(header, "*")
+	arrayCount, found := strings.CutPrefix(header, "*")
 	if !found {
 		return nil, RespParseError
 	}
-	length, err := strconv.Atoi(count)
+	arrayLength, err := strconv.Atoi(arrayCount)
 	if err != nil {
 		return nil, RespParseError
 	}
 
-	bulkArray := strings.Split(body, "$")
-	bulkArray = bulkArray[1:] // drop first empty string
-
-	if len(bulkArray) != length {
-		return nil, RespParseError
-	}
-	result := make([]string, length)
-	for i, bulkStr := range bulkArray {
-		result[i], err = bulkStringDecode("$" + bulkStr)
-		if err != nil {
-			return nil, err
+	result := make([]string, arrayLength)
+	for i := 0; i < arrayLength; i++ {
+		header, rest, found := strings.Cut(body, "\r\n")
+		if !found {
+			return nil, RespParseError
 		}
+		count, found := strings.CutPrefix(header, "$")
+		length, err := strconv.Atoi(count)
+		if err != nil {
+			return nil, RespParseError
+		}
+		result[i] = rest[:length]
+		body, _ = strings.CutPrefix(rest[length:], "\r\n")
+	}
+	if body != "" {
+		return nil, RespParseError
 	}
 	return result, nil
 }

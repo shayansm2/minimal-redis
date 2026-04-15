@@ -68,7 +68,8 @@ func xAddHandler(ctx context.Context, args []string) any {
 	key := args[0]
 	stream := getStream(key)
 
-	id, err := getNewValidId(stream, args[1])
+	id := strToId(args[1])
+	id, err := validateId(stream, id)
 	if err != nil {
 		return err
 	}
@@ -78,7 +79,7 @@ func xAddHandler(ctx context.Context, args []string) any {
 		kv[args[i]] = args[i+1]
 	}
 
-	stream.ids = append(stream.ids, *id)
+	stream.ids = append(stream.ids, id)
 	stream.kvs = append(stream.kvs, kv)
 
 	db.set(key, stream)
@@ -87,57 +88,48 @@ func xAddHandler(ctx context.Context, args []string) any {
 	return BulkStr(id.toStr())
 }
 
-// hard to refactor and change
-func getNewValidId(stream *Stream, id string) (*ID, error) {
+func strToId(id string) ID {
+	msTimeStr, seqNumStr, found := strings.Cut(id, "-")
+	if !found {
+		if id == "*" || id == "$" {
+			return ID{time.Now().UnixMilli(), 0}
+		}
+		msTime, _ := strconv.Atoi(id)
+		return ID{int64(msTime), 0}
+
+	}
+	msTime, _ := strconv.Atoi(msTimeStr)
+	seqNum := -1
+	if num, err := strconv.Atoi(seqNumStr); err == nil {
+		seqNum = num
+	}
+	return ID{int64(msTime), seqNum}
+}
+
+func validateId(stream *Stream, id ID) (ID, error) {
 	lastId := ID{0, 0}
-	if id == lastId.toStr() {
-		return nil, errors.New("ERR The ID specified in XADD must be greater than 0-0")
+	if id.toStr() == lastId.toStr() {
+		return id, errors.New("ERR The ID specified in XADD must be greater than 0-0")
 	}
 	if len(stream.ids) > 0 {
 		lastId = stream.ids[len(stream.ids)-1]
 	}
 
-	var msTime int64
-	var seqNum int
-	msTimeStr, seqNumStr, found := strings.Cut(id, "-")
-	if !found {
-		msTime = time.Now().UnixMilli()
-		seqNumStr = "*"
-	} else {
-		ms, _ := strconv.Atoi(msTimeStr)
-		msTime = int64(ms)
-		seqNum, _ = strconv.Atoi(seqNumStr)
+	if id.msTime > lastId.msTime {
+		return ID{id.msTime, max(id.seqNum, 0)}, nil
 	}
 
-	if msTime > lastId.msTime {
-		if seqNumStr == "*" {
-			seqNum = 0
-		}
-		return &ID{msTime, seqNum}, nil
+	if id.msTime < lastId.msTime {
+		return id, errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 	}
 
-	if msTime < lastId.msTime {
-		return nil, errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
+	if id.seqNum == -1 {
+		id.seqNum = lastId.seqNum + 1
 	}
-
-	if seqNumStr == "*" {
-		seqNum = lastId.seqNum + 1
+	if id.seqNum > lastId.seqNum {
+		return id, nil
 	}
-	if seqNum > lastId.seqNum {
-		return &ID{msTime, seqNum}, nil
-	}
-	return nil, errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
-}
-
-func getQueryId(id string) ID {
-	if !strings.Contains(id, "-") {
-		msTime, _ := strconv.Atoi(id)
-		return ID{int64(msTime), 0}
-	}
-	m, s, _ := strings.Cut(id, "-")
-	msTime, _ := strconv.Atoi(m)
-	seqNum, _ := strconv.Atoi(s)
-	return ID{int64(msTime), seqNum}
+	return id, errors.New("ERR The ID specified in XADD is equal or smaller than the target stream top item")
 }
 
 func xRangeHandler(ctx context.Context, args []string) any {
@@ -148,14 +140,14 @@ func xRangeHandler(ctx context.Context, args []string) any {
 	if args[1] == "-" {
 		startIdx = 0
 	} else {
-		id := getQueryId(args[1])
+		id := strToId(args[1])
 		startIdx = utils.GreaterEqualIndex(stream.ids, id)
 	}
 
 	if args[2] == "+" {
 		endIdx = len(stream.ids)
 	} else {
-		id := getQueryId(args[2])
+		id := strToId(args[2])
 		endIdx = min(utils.LessEqualIndex(stream.ids, id)+1, len(stream.ids))
 	}
 
@@ -177,7 +169,7 @@ func xReadHandler(ctx context.Context, args []string) any {
 	ids := make([]ID, keyCount)
 	for i := 0; i < keyCount; i++ {
 		key := args[shift+i]
-		id := getQueryId(args[keyCount+shift+i])
+		id := strToId(args[keyCount+shift+i])
 		keys[i] = key
 		ids[i] = id
 	}

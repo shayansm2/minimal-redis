@@ -18,6 +18,12 @@ func TestRespArrayParse(t *testing.T) {
 	decoded, err = respArrayBulkStringParse(encoded)
 	assert.Nil(t, err)
 	assert.Equal(t, expected, decoded)
+
+	encoded = "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nstreams\r\n$8\r\nsome_key\r\n$1\r\n$"
+	expected = []string{"XREAD", "BLOCK", "1000", "streams", "some_key", "$"}
+	decoded, err = respArrayBulkStringParse(encoded)
+	assert.Nil(t, err)
+	assert.Equal(t, expected, decoded)
 }
 
 func TestBulkStringEncode(t *testing.T) {
