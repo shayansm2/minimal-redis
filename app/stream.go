@@ -96,7 +96,6 @@ func strToId(id string) ID {
 		}
 		msTime, _ := strconv.Atoi(id)
 		return ID{int64(msTime), 0}
-
 	}
 	msTime, _ := strconv.Atoi(msTimeStr)
 	seqNum := -1

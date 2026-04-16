@@ -3,46 +3,51 @@ package main
 import (
 	"context"
 	"errors"
+	"net"
 	"strconv"
 	"strings"
 )
 
-var handlers = map[string]func(context.Context, []string) string{
-	"PING":    responseHandler(pingHandler),
-	"ECHO":    responseHandler(echoHandler),
-	"SET":     responseHandler(transactionHandler(setHandler)),
-	"GET":     responseHandler(transactionHandler(getHandler)),
-	"INCR":    responseHandler(transactionHandler(incrHandler)),
-	"MULTI":   responseHandler(multiHandler),
-	"EXEC":    responseHandler(execHandler),
-	"DISCARD": responseHandler(discardHandler),
-	"CONFIG":  responseHandler(configHandler),
-	"KEYS":    responseHandler(keysHandler),
-	"RPUSH":   responseHandler(transactionHandler(rPushHandler)),
-	"LPUSH":   responseHandler(transactionHandler(lPushHandler)),
-	"LRANGE":  responseHandler(transactionHandler(lRangeHandler)),
-	"LLEN":    responseHandler(transactionHandler(lLenHandler)),
-	"LPOP":    responseHandler(transactionHandler(lPopHandler)),
-	"BLPOP":   responseHandler(transactionHandler(bLPopHandler)),
-	"WATCH":   responseHandler(watchHandler),
-	"UNWATCH": responseHandler(unwatchHandler),
-	"TYPE":    responseHandler(typeHandler),
-	"XADD":    responseHandler(xAddHandler),
-	"XRANGE":  responseHandler(xRangeHandler),
-	"XREAD":   responseHandler(xReadHandler),
-	"INFO":    responseHandler(infoHandler),
+var handlers = map[string]func(net.Conn, context.Context, []string){
+	"PING":     responseHandler(pingHandler),
+	"ECHO":     responseHandler(echoHandler),
+	"SET":      responseHandler(transactionHandler(setHandler)),
+	"GET":      responseHandler(transactionHandler(getHandler)),
+	"INCR":     responseHandler(transactionHandler(incrHandler)),
+	"MULTI":    responseHandler(multiHandler),
+	"EXEC":     responseHandler(execHandler),
+	"DISCARD":  responseHandler(discardHandler),
+	"CONFIG":   responseHandler(configHandler),
+	"KEYS":     responseHandler(keysHandler),
+	"RPUSH":    responseHandler(transactionHandler(rPushHandler)),
+	"LPUSH":    responseHandler(transactionHandler(lPushHandler)),
+	"LRANGE":   responseHandler(transactionHandler(lRangeHandler)),
+	"LLEN":     responseHandler(transactionHandler(lLenHandler)),
+	"LPOP":     responseHandler(transactionHandler(lPopHandler)),
+	"BLPOP":    responseHandler(transactionHandler(bLPopHandler)),
+	"WATCH":    responseHandler(watchHandler),
+	"UNWATCH":  responseHandler(unwatchHandler),
+	"TYPE":     responseHandler(typeHandler),
+	"XADD":     responseHandler(xAddHandler),
+	"XRANGE":   responseHandler(xRangeHandler),
+	"XREAD":    responseHandler(xReadHandler),
+	"INFO":     responseHandler(infoHandler),
+	"REPLCONF": responseHandler(replConfHandler),
+	"PSYNC":    pSyncHandler,
 }
 
 type handler func(context.Context, []string) any
 
-func responseHandler(f handler) func(context.Context, []string) string {
-	return func(ctx context.Context, s []string) string {
+func responseHandler(f handler) func(net.Conn, context.Context, []string) {
+	return func(conn net.Conn, ctx context.Context, s []string) {
 		result := f(ctx, s)
-		encoded, err := encode(result)
-		if err != nil {
-			return toRespError(err)
+		var response string
+		if encoded, err := encode(result); err != nil {
+			response = toRespError(err)
+		} else {
+			response = encoded
 		}
-		return encoded
+		conn.Write([]byte(response))
 	}
 }
 

@@ -92,6 +92,20 @@ func bulkStringDecode(str string) (string, error) {
 	return decoded, nil
 }
 
+var RespDecodeError = errors.New("not a valid resp string")
+
+func respSimpleStringDecode(str string) (string, error) {
+	str, found := strings.CutPrefix(str, "+")
+	if !found {
+		return "", RespDecodeError
+	}
+	str, found = strings.CutSuffix(str, "\r\n")
+	if !found {
+		return "", RespDecodeError
+	}
+	return str, nil
+}
+
 func encode(value any) (string, error) {
 	if value == nil {
 		return NullBulkString, nil

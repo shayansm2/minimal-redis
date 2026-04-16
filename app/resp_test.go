@@ -50,6 +50,12 @@ func TestBulkStringDecode(t *testing.T) {
 	assert.Equal(t, expected, decoded)
 }
 
+func TestRespStringDecode(t *testing.T) {
+	decoded, err := respSimpleStringDecode("+PONG\r\n")
+	assert.Nil(t, err)
+	assert.Equal(t, "PONG", decoded)
+}
+
 func TestRespArrayEncode(t *testing.T) {
 	expected := "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
 	bulkArray := []BulkStr{"hello", "world"}
@@ -88,13 +94,16 @@ func TestEncode(t *testing.T) {
 	val, err = encode(BulkStr("hi"))
 	assert.Nil(t, err)
 	assert.Equal(t, "$2\r\nhi\r\n", val)
-
 }
 
 func TestArrayEncode(t *testing.T) {
 	var nullArr []string
 	val, err := encode(nullArr)
 	assert.Equal(t, NullArray, val)
+
+	val, err = encode([]BulkStr{"PING"})
+	assert.Nil(t, err)
+	assert.Equal(t, "*1\r\n$4\r\nPING\r\n", val)
 
 	expected := "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
 	encoded, err := encode([]BulkStr{"hello", "world"})

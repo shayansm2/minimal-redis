@@ -11,3 +11,4 @@
 - [x] refactor streams
 - [ ] context cancel for blocking commands like `BLPOP` and `XREAD`
 - [x] move binary search and linked list to utils
+- [ ] handshake is stateless from master

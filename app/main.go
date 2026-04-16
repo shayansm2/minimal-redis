@@ -17,16 +17,18 @@ func init() {
 }
 
 func main() {
-	err := loadRDB()
-	if err != nil {
+	if err := loadRDB(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
 	for _, job := range bgJobs {
 		go job()
 	}
-	err = initTcpServer()
-	if err != nil {
+	if err := handshake(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+	if err := initTcpServer(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
 	}
@@ -56,9 +58,9 @@ const WatcherContextKey = "watcher"
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	var t Transaction
+	var transaction Transaction
 	watcher := NewWatcher()
-	ctx := context.WithValue(context.Background(), TransactionContextKey, &t)
+	ctx := context.WithValue(context.Background(), TransactionContextKey, &transaction)
 	ctx = context.WithValue(ctx, WatcherContextKey, &watcher)
 
 	for {
@@ -80,7 +82,6 @@ func handleConnection(conn net.Conn) {
 			conn.Write([]byte(toRespError(UnknownCommandError)))
 			continue
 		}
-		out := handler(ctx, args[1:])
-		conn.Write([]byte(out))
+		handler(conn, ctx, args[1:])
 	}
 }
