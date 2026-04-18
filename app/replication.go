@@ -16,15 +16,21 @@ var leaderHost string
 var leaderPort string
 var leaderReplicaId string
 
+var followerConnections []net.Conn
+var writeEvents chan []string
+
 func init() {
 	leaderAddress := getConfigs().get("replicaof", "")
 	if leaderAddress != "" {
 		leaderHost, leaderPort, _ = strings.Cut(leaderAddress, " ")
 		role = RoleFollower
+		followerConnections = make([]net.Conn, 0)
 	} else {
 		role = RoleLeader
 		leaderReplicaId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" // hard coded
 	}
+	writeEvents = make(chan []string)
+	bgJobs = append(bgJobs, propagateWritesToFollowersJob)
 }
 
 func infoHandler(ctx context.Context, args []string) any {
@@ -50,31 +56,29 @@ func pSyncHandler(conn net.Conn, ctx context.Context, args []string) {
 	rdbFile.Read(dump)
 	encoded := append([]byte(fmt.Sprintf("$%d\r\n", len(dump))), dump...)
 	conn.Write(encoded)
+
+	followerConnections = append(followerConnections, conn)
 }
 
-func handshake() error {
+func handshake() (conn net.Conn, err error) {
 	if role == RoleLeader {
-		return nil
+		return
 	}
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", leaderHost, leaderPort))
+	conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", leaderHost, leaderPort))
 	if err != nil {
-		return err
+		return
 	}
-	defer conn.Close()
 	if err = sendAndExpect(conn, []BulkStr{"PING"}, "PONG"); err != nil {
-		return err
+		return
 	}
 	if err = sendAndExpect(conn, []BulkStr{"REPLCONF", "listening-port", BulkStr(port)}, "OK"); err != nil {
-		return err
+		return
 	}
 	if err = sendAndExpect(conn, []BulkStr{"REPLCONF", "capa", "psync2"}, "OK"); err != nil {
-		return err
+		return
 	}
 	send(conn, []BulkStr{"PSYNC", "?", "-1"})
-	// if _, err = send(conn, []BulkStr{"PSYNC", "?", "-1"}); err != nil {
-	// 	return err
-	// }
-	return nil
+	return
 }
 
 func sendAndExpect(conn net.Conn, in []BulkStr, expect RespStr) error {
@@ -89,6 +93,7 @@ func send(conn net.Conn, in []BulkStr) (RespStr, error) {
 	if err != nil {
 		return "", err
 	}
+	// fmt.Printf("sending %q\n", encoded)
 	conn.Write([]byte(encoded))
 
 	buf := make([]byte, 4096)
@@ -96,7 +101,20 @@ func send(conn net.Conn, in []BulkStr) (RespStr, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Println("resp:", string(buf[:n]))
 	result, err := respSimpleStringDecode(string(buf[:n]))
 	return RespStr(result), err
+}
+
+func propagateWritesToFollowersJob() {
+	for {
+		writeCmd := <-writeEvents
+		bulkArr := make([]BulkStr, len(writeCmd))
+		for i, v := range writeCmd {
+			bulkArr[i] = BulkStr(v)
+		}
+		for _, conn := range followerConnections {
+			encoded, _ := encode(bulkArr)
+			conn.Write([]byte(encoded))
+		}
+	}
 }

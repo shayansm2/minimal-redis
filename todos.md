@@ -12,3 +12,5 @@
 - [ ] context cancel for blocking commands like `BLPOP` and `XREAD`
 - [x] move binary search and linked list to utils
 - [ ] handshake is stateless from master
+- [ ] replicas should actually work, ignoring empty rdb cmd
+- [ ] add write event for all set commands

@@ -1,29 +1,42 @@
 package main
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestRespArrayParse(t *testing.T) {
-	encoded := "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n"
-	expected := []string{"hello", "world"}
-	decoded, err := respArrayBulkStringParse(encoded)
-	assert.Nil(t, err)
-	assert.Equal(t, expected, decoded)
+	tests := []struct {
+		encoded string
+		decoded [][]string
+	}{
+		{
+			encoded: "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n",
+			decoded: [][]string{{"hello", "world"}},
+		},
+		{
+			encoded: "*0\r\n",
+			decoded: [][]string{{}},
+		},
+		{
+			encoded: "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nstreams\r\n$8\r\nsome_key\r\n$1\r\n$",
+			decoded: [][]string{{"XREAD", "BLOCK", "1000", "streams", "some_key", "$"}},
+		},
+		{
+			encoded: "*2\r\n$6\r\nSELECT\r\n$1\r\n0\r\n*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n",
+			decoded: [][]string{{"SELECT", "0"}, {"SET", "foo", "123"}},
+		},
+	}
 
-	encoded = "*0\r\n"
-	expected = []string{}
-	decoded, err = respArrayBulkStringParse(encoded)
-	assert.Nil(t, err)
-	assert.Equal(t, expected, decoded)
-
-	encoded = "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nstreams\r\n$8\r\nsome_key\r\n$1\r\n$"
-	expected = []string{"XREAD", "BLOCK", "1000", "streams", "some_key", "$"}
-	decoded, err = respArrayBulkStringParse(encoded)
-	assert.Nil(t, err)
-	assert.Equal(t, expected, decoded)
+	for i, tt := range tests {
+		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
+			decoded, err := respArrayBulkStringParse(tt.encoded)
+			assert.Nil(t, err)
+			assert.Equal(t, tt.decoded, decoded)
+		})
+	}
 }
 
 func TestBulkStringEncode(t *testing.T) {

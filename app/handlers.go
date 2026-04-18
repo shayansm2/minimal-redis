@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -34,6 +35,8 @@ var handlers = map[string]func(net.Conn, context.Context, []string){
 	"INFO":     responseHandler(infoHandler),
 	"REPLCONF": responseHandler(replConfHandler),
 	"PSYNC":    pSyncHandler,
+	"SELECT":   responseHandler(notImplementedHandler),
+	"COMMAND":  responseHandler(notImplementedHandler),
 }
 
 type handler func(context.Context, []string) any
@@ -41,6 +44,9 @@ type handler func(context.Context, []string) any
 func responseHandler(f handler) func(net.Conn, context.Context, []string) {
 	return func(conn net.Conn, ctx context.Context, s []string) {
 		result := f(ctx, s)
+		if ctx.Value(SilentResponseKey).(bool) {
+			return
+		}
 		var response string
 		if encoded, err := encode(result); err != nil {
 			response = toRespError(err)
@@ -53,6 +59,10 @@ func responseHandler(f handler) func(net.Conn, context.Context, []string) {
 
 func pingHandler(ctx context.Context, args []string) any {
 	return RespStr("PONG")
+}
+
+func notImplementedHandler(ctx context.Context, args []string) any {
+	return errors.New("ERR not implemented")
 }
 
 func echoHandler(ctx context.Context, args []string) any {
@@ -78,6 +88,8 @@ func setHandler(ctx context.Context, args []string) any {
 			db.expire(key, px)
 		}
 	}
+
+	writeEvents <- slices.Concat([]string{"SET"}, args)
 
 	return RespStr("OK")
 }
@@ -106,6 +118,9 @@ func incrHandler(ctx context.Context, args []string) any {
 	}
 	newValue := value.(int) + 1
 	db.set(key, newValue)
+
+	writeEvents <- slices.Concat([]string{"INCR"}, args)
+
 	return newValue
 }
 

@@ -11,39 +11,59 @@ import (
 type RespStr string
 type BulkStr string
 
-var RespParseError = fmt.Errorf("not a valid RESP array")
+type RespParseError string
 
-func respArrayBulkStringParse(str string) ([]string, error) {
-	header, body, found := strings.Cut(str, "\r\n")
-	if !found {
-		return nil, RespParseError
-	}
-	arrayCount, found := strings.CutPrefix(header, "*")
-	if !found {
-		return nil, RespParseError
-	}
-	arrayLength, err := strconv.Atoi(arrayCount)
-	if err != nil {
-		return nil, RespParseError
-	}
+func (e RespParseError) error() error {
+	return fmt.Errorf("not a valid RESP array: %v", e)
+}
 
-	result := make([]string, arrayLength)
-	for i := 0; i < arrayLength; i++ {
-		header, rest, found := strings.Cut(body, "\r\n")
+func parse(str string) ([][]string, error) {
+	if strings.HasPrefix(str, "*") && strings.HasSuffix(str, "\r\n") {
+		return respArrayBulkStringParse(str)
+	}
+	if strings.HasPrefix(str, "$") && !strings.HasSuffix(str, "\r\n") {
+		// bytes, not implemented
+		return [][]string{}, nil
+	}
+	return nil, RespParseError(str).error()
+}
+
+func respArrayBulkStringParse(str string) ([][]string, error) {
+	respErr := RespParseError(str).error()
+	result := make([][]string, 0)
+
+	for str != "" {
+		header, body, found := strings.Cut(str, "\r\n")
 		if !found {
-			return nil, RespParseError
+			return nil, respErr
 		}
-		count, found := strings.CutPrefix(header, "$")
-		length, err := strconv.Atoi(count)
+		arrayCount, found := strings.CutPrefix(header, "*")
+		if !found {
+			return nil, respErr
+		}
+		arrayLength, err := strconv.Atoi(arrayCount)
 		if err != nil {
-			return nil, RespParseError
+			return nil, respErr
 		}
-		result[i] = rest[:length]
-		body, _ = strings.CutPrefix(rest[length:], "\r\n")
+
+		cmd := make([]string, arrayLength)
+		for i := 0; i < arrayLength; i++ {
+			header, rest, found := strings.Cut(body, "\r\n")
+			if !found {
+				return nil, respErr
+			}
+			count, found := strings.CutPrefix(header, "$")
+			length, err := strconv.Atoi(count)
+			if err != nil {
+				return nil, respErr
+			}
+			cmd[i] = rest[:length]
+			body, _ = strings.CutPrefix(rest[length:], "\r\n")
+		}
+		result = append(result, cmd)
+		str = body
 	}
-	if body != "" {
-		return nil, RespParseError
-	}
+
 	return result, nil
 }
 
