@@ -42,8 +42,14 @@ func infoHandler(ctx context.Context, args []string) any {
 	return BulkStr(strings.Join(info, "\n"))
 }
 
-func replConfHandler(ctx context.Context, args []string) any {
-	return RespStr("OK")
+func replConfHandler(conn net.Conn, ctx context.Context, args []string) {
+	var response string
+	if role == RoleLeader {
+		response, _ = encode(RespStr("OK"))
+	} else {
+		response, _ = encode([]BulkStr{"REPLCONF", "ACK", "0"})
+	}
+	conn.Write([]byte(response))
 }
 
 func pSyncHandler(conn net.Conn, ctx context.Context, args []string) {

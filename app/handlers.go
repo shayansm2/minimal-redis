@@ -33,7 +33,7 @@ var handlers = map[string]func(net.Conn, context.Context, []string){
 	"XRANGE":   responseHandler(xRangeHandler),
 	"XREAD":    responseHandler(xReadHandler),
 	"INFO":     responseHandler(infoHandler),
-	"REPLCONF": responseHandler(replConfHandler),
+	"REPLCONF": replConfHandler,
 	"PSYNC":    pSyncHandler,
 	"SELECT":   responseHandler(notImplementedHandler),
 	"COMMAND":  responseHandler(notImplementedHandler),
