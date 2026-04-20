@@ -5,16 +5,18 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 )
 
 const RoleLeader = "master"
 const RoleFollower = "slave"
 
-var role string
+var replicationRole string
 var leaderHost string
 var leaderPort string
 var leaderReplicaId string
+var offset int
 
 var followerConnections []net.Conn
 var writeEvents chan []string
@@ -23,33 +25,31 @@ func init() {
 	leaderAddress := getConfigs().get("replicaof", "")
 	if leaderAddress != "" {
 		leaderHost, leaderPort, _ = strings.Cut(leaderAddress, " ")
-		role = RoleFollower
+		replicationRole = RoleFollower
 		followerConnections = make([]net.Conn, 0)
 	} else {
-		role = RoleLeader
+		replicationRole = RoleLeader
 		leaderReplicaId = "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb" // hard coded
 	}
+	offset = 0
 	writeEvents = make(chan []string)
 	bgJobs = append(bgJobs, propagateWritesToFollowersJob)
 }
 
 func infoHandler(ctx context.Context, args []string) any {
 	info := []string{
-		fmt.Sprintf("role:%s", role),
+		fmt.Sprintf("role:%s", replicationRole),
 		fmt.Sprintf("master_replid:%s", leaderReplicaId),
-		"master_repl_offset:0",
+		fmt.Sprintf("master_repl_offset:%d", offset),
 	}
 	return BulkStr(strings.Join(info, "\n"))
 }
 
-func replConfHandler(conn net.Conn, ctx context.Context, args []string) {
-	var response string
-	if role == RoleLeader {
-		response, _ = encode(RespStr("OK"))
-	} else {
-		response, _ = encode([]BulkStr{"REPLCONF", "ACK", "0"})
+func replConfHandler(ctx context.Context, args []string) any {
+	if replicationRole == RoleLeader {
+		return RespStr("OK")
 	}
-	conn.Write([]byte(response))
+	return []BulkStr{"REPLCONF", "ACK", BulkStr(strconv.Itoa(offset))}
 }
 
 func pSyncHandler(conn net.Conn, ctx context.Context, args []string) {
@@ -64,10 +64,13 @@ func pSyncHandler(conn net.Conn, ctx context.Context, args []string) {
 	conn.Write(encoded)
 
 	followerConnections = append(followerConnections, conn)
+
+	// getAck, _ := encode([]BulkStr{"REPLCONF", "GETACK", "*"})
+	// conn.Write([]byte(getAck))
 }
 
 func handshake() (conn net.Conn, err error) {
-	if role == RoleLeader {
+	if replicationRole == RoleLeader {
 		return
 	}
 	conn, err = net.Dial("tcp", fmt.Sprintf("%s:%s", leaderHost, leaderPort))
@@ -123,4 +126,44 @@ func propagateWritesToFollowersJob() {
 			conn.Write([]byte(encoded))
 		}
 	}
+}
+
+var replicationHandlers = map[string]func(net.Conn, context.Context, []string){
+	"PING":     replicationHandler(pingHandler),
+	"ECHO":     replicationHandler(echoHandler),
+	"SET":      replicationHandler(setHandler),
+	"GET":      replicationHandler(getHandler),
+	"INCR":     replicationHandler(incrHandler),
+	"MULTI":    replicationHandler(multiHandler),
+	"EXEC":     replicationHandler(execHandler),
+	"DISCARD":  replicationHandler(discardHandler),
+	"CONFIG":   replicationHandler(configHandler),
+	"KEYS":     replicationHandler(keysHandler),
+	"RPUSH":    replicationHandler(rPushHandler),
+	"LPUSH":    replicationHandler(lPushHandler),
+	"LRANGE":   replicationHandler(lRangeHandler),
+	"LLEN":     replicationHandler(lLenHandler),
+	"LPOP":     replicationHandler(lPopHandler),
+	"BLPOP":    replicationHandler(bLPopHandler),
+	"WATCH":    replicationHandler(watchHandler),
+	"UNWATCH":  replicationHandler(unwatchHandler),
+	"TYPE":     replicationHandler(typeHandler),
+	"XADD":     replicationHandler(xAddHandler),
+	"XRANGE":   replicationHandler(xRangeHandler),
+	"XREAD":    replicationHandler(xReadHandler),
+	"INFO":     replicationHandler(infoHandler),
+	"REPLCONF": responseHandler(replConfHandler),
+	"SELECT":   replicationHandler(notImplementedHandler),
+	"COMMAND":  replicationHandler(notImplementedHandler),
+}
+
+func replicationHandler(f handler) func(net.Conn, context.Context, []string) {
+	return func(conn net.Conn, ctx context.Context, s []string) {
+		f(ctx, s[1:])
+	}
+}
+
+func handleReplicationConnection(conn net.Conn) {
+	defer conn.Close()
+	processConnection(conn, context.Background(), replicationHandlers)
 }

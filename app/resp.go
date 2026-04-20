@@ -17,54 +17,68 @@ func (e RespParseError) error() error {
 	return fmt.Errorf("not a valid RESP array: %v", e)
 }
 
-func parse(str string) ([][]string, error) {
-	if strings.HasPrefix(str, "*") && strings.HasSuffix(str, "\r\n") {
+func parse(str string) ([]string, int, error) {
+	if strings.HasPrefix(str, "*") {
 		return respArrayBulkStringParse(str)
 	}
-	if strings.HasPrefix(str, "$") && !strings.HasSuffix(str, "\r\n") {
-		// bytes, not implemented
-		return [][]string{}, nil
+	if strings.HasPrefix(str, "$") {
+		return bytesParse(str)
 	}
-	return nil, RespParseError(str).error()
+	return nil, 0, RespParseError(str).error()
 }
 
-func respArrayBulkStringParse(str string) ([][]string, error) {
-	respErr := RespParseError(str).error()
-	result := make([][]string, 0)
+func bytesParse(str string) ([]string, int, error) {
+	parseErr := fmt.Errorf("invalid resp bytes")
 
-	for str != "" {
-		header, body, found := strings.Cut(str, "\r\n")
-		if !found {
-			return nil, respErr
-		}
-		arrayCount, found := strings.CutPrefix(header, "*")
-		if !found {
-			return nil, respErr
-		}
-		arrayLength, err := strconv.Atoi(arrayCount)
-		if err != nil {
-			return nil, respErr
-		}
-
-		cmd := make([]string, arrayLength)
-		for i := 0; i < arrayLength; i++ {
-			header, rest, found := strings.Cut(body, "\r\n")
-			if !found {
-				return nil, respErr
-			}
-			count, found := strings.CutPrefix(header, "$")
-			length, err := strconv.Atoi(count)
-			if err != nil {
-				return nil, respErr
-			}
-			cmd[i] = rest[:length]
-			body, _ = strings.CutPrefix(rest[length:], "\r\n")
-		}
-		result = append(result, cmd)
-		str = body
+	header, _, found := strings.Cut(str, "\r\n")
+	if !found {
+		return nil, 0, parseErr
+	}
+	byteCount, found := strings.CutPrefix(header, "$")
+	if !found {
+		return nil, 0, parseErr
+	}
+	byteLength, err := strconv.Atoi(byteCount)
+	if err != nil {
+		return nil, 0, parseErr
 	}
 
-	return result, nil
+	n := byteLength + len(header+"\r\n")
+	return nil, n, nil
+}
+
+func respArrayBulkStringParse(str string) ([]string, int, error) {
+	respErr := RespParseError(str).error()
+
+	header, body, found := strings.Cut(str, "\r\n")
+	if !found {
+		return nil, 0, respErr
+	}
+	arrayCount, found := strings.CutPrefix(header, "*")
+	if !found {
+		return nil, 0, respErr
+	}
+	arrayLength, err := strconv.Atoi(arrayCount)
+	if err != nil {
+		return nil, 0, respErr
+	}
+
+	result := make([]string, arrayLength)
+	for i := 0; i < arrayLength; i++ {
+		header, rest, found := strings.Cut(body, "\r\n")
+		if !found {
+			return nil, 0, respErr
+		}
+		count, found := strings.CutPrefix(header, "$")
+		length, err := strconv.Atoi(count)
+		if err != nil {
+			return nil, 0, respErr
+		}
+		result[i] = rest[:length]
+		body, _ = strings.CutPrefix(rest[length:], "\r\n")
+	}
+	n := len(str) - len(body)
+	return result, n, nil
 }
 
 func toRespArray(array []string) string {

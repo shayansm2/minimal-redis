@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,32 +8,42 @@ import (
 
 func TestRespArrayParse(t *testing.T) {
 	tests := []struct {
+		name    string
 		encoded string
 		decoded [][]string
 	}{
 		{
+			name:    "test resp array parse",
 			encoded: "*2\r\n$5\r\nhello\r\n$5\r\nworld\r\n",
 			decoded: [][]string{{"hello", "world"}},
 		},
 		{
+			name:    "test null array parse",
 			encoded: "*0\r\n",
 			decoded: [][]string{{}},
 		},
 		{
+			name:    "test array parse containing $ character",
 			encoded: "*6\r\n$5\r\nXREAD\r\n$5\r\nBLOCK\r\n$4\r\n1000\r\n$7\r\nstreams\r\n$8\r\nsome_key\r\n$1\r\n$",
 			decoded: [][]string{{"XREAD", "BLOCK", "1000", "streams", "some_key", "$"}},
 		},
 		{
+			name:    "test multi array parse",
 			encoded: "*2\r\n$6\r\nSELECT\r\n$1\r\n0\r\n*3\r\n$3\r\nSET\r\n$3\r\nfoo\r\n$3\r\n123\r\n",
 			decoded: [][]string{{"SELECT", "0"}, {"SET", "foo", "123"}},
 		},
 	}
 
-	for i, tt := range tests {
-		t.Run(fmt.Sprintf("test-%d", i), func(t *testing.T) {
-			decoded, err := respArrayBulkStringParse(tt.encoded)
-			assert.Nil(t, err)
-			assert.Equal(t, tt.decoded, decoded)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			actual := make([][]string, 0)
+			for encoded := tt.encoded; encoded != ""; {
+				decoded, n, err := respArrayBulkStringParse(encoded)
+				assert.Nil(t, err)
+				actual = append(actual, decoded)
+				encoded = encoded[n:]
+			}
+			assert.Equal(t, tt.decoded, actual)
 		})
 	}
 }

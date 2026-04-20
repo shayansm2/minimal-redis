@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"strings"
+	"time"
 )
 
 var bgJobs []func()
@@ -30,7 +31,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	} else if conn != nil {
-		go handleConnection(conn, true)
+		go handleReplicationConnection(conn)
 	}
 
 	if err := initTcpServer(); err != nil {
@@ -51,7 +52,7 @@ func initTcpServer() error {
 		if err != nil {
 			return fmt.Errorf("Error accepting connection: %s", err.Error())
 		}
-		go handleConnection(conn, false)
+		go handleConnection(conn)
 	}
 }
 
@@ -59,17 +60,19 @@ var UnknownCommandError = fmt.Errorf("ERR unknown command")
 
 const TransactionContextKey = "transaction"
 const WatcherContextKey = "watcher"
-const SilentResponseKey = "silent-response"
 
-func handleConnection(conn net.Conn, silence bool) {
+func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
 	var transaction Transaction
 	watcher := NewWatcher()
 	ctx := context.WithValue(context.Background(), TransactionContextKey, &transaction)
 	ctx = context.WithValue(ctx, WatcherContextKey, &watcher)
-	ctx = context.WithValue(ctx, SilentResponseKey, silence)
 
+	processConnection(conn, ctx, handlers)
+}
+
+func processConnection(conn net.Conn, ctx context.Context, handlers map[string]func(net.Conn, context.Context, []string)) {
 	for {
 		buf := make([]byte, 4096)
 		n, err := conn.Read(buf)
@@ -77,14 +80,20 @@ func handleConnection(conn net.Conn, silence bool) {
 			fmt.Println(err)
 			return
 		}
-		// fmt.Printf("recived: %q\n", string(buf[:n]))
-		cmds, err := parse(string(buf[:n]))
-		if err != nil {
-			fmt.Printf("invalid args: %q", err)
-			continue
-		}
-
-		for _, cmd := range cmds {
+		fmt.Printf("[%v] recived: %q\n", time.Now().Format("15:04:05.000000"), string(buf[:n]))
+		in := string(buf[:n])
+		for in != "" {
+			cmd, byteCount, err := parse(in)
+			if err != nil {
+				in = ""
+				fmt.Printf("invalid args: %q", err)
+				continue
+			}
+			fmt.Printf("[%v] processing: %q\n", time.Now().Format("15:04:05.000000"), cmd)
+			in = in[byteCount:]
+			if len(cmd) == 0 {
+				continue
+			}
 			verb := cmd[0]
 			handler, found := handlers[strings.ToUpper(verb)]
 			if !found {
@@ -92,8 +101,8 @@ func handleConnection(conn net.Conn, silence bool) {
 				conn.Write([]byte(toRespError(UnknownCommandError)))
 				continue
 			}
-			handler(conn, ctx, cmd[1:])
+			handler(conn, ctx, cmd)
+			offset += byteCount
 		}
-
 	}
 }

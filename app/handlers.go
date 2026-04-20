@@ -33,7 +33,7 @@ var handlers = map[string]func(net.Conn, context.Context, []string){
 	"XRANGE":   responseHandler(xRangeHandler),
 	"XREAD":    responseHandler(xReadHandler),
 	"INFO":     responseHandler(infoHandler),
-	"REPLCONF": replConfHandler,
+	"REPLCONF": responseHandler(replConfHandler),
 	"PSYNC":    pSyncHandler,
 	"SELECT":   responseHandler(notImplementedHandler),
 	"COMMAND":  responseHandler(notImplementedHandler),
@@ -43,10 +43,7 @@ type handler func(context.Context, []string) any
 
 func responseHandler(f handler) func(net.Conn, context.Context, []string) {
 	return func(conn net.Conn, ctx context.Context, s []string) {
-		result := f(ctx, s)
-		if ctx.Value(SilentResponseKey).(bool) {
-			return
-		}
+		result := f(ctx, s[1:])
 		var response string
 		if encoded, err := encode(result); err != nil {
 			response = toRespError(err)

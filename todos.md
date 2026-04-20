@@ -14,3 +14,4 @@
 - [ ] handshake is stateless from master
 - [ ] replicas should actually work, ignoring empty rdb cmd
 - [ ] add write event for all set commands
+- [ ] prevent write on replica
