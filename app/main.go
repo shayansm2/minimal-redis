@@ -60,14 +60,17 @@ var UnknownCommandError = fmt.Errorf("ERR unknown command")
 
 const TransactionContextKey = "transaction"
 const WatcherContextKey = "watcher"
+const UsernameContextKey = "username"
 
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
+	var username string
 	var transaction Transaction
 	watcher := NewWatcher()
 	ctx := context.WithValue(context.Background(), TransactionContextKey, &transaction)
 	ctx = context.WithValue(ctx, WatcherContextKey, &watcher)
+	ctx = context.WithValue(ctx, UsernameContextKey, &username)
 
 	processConnection(conn, ctx, handlers)
 }
